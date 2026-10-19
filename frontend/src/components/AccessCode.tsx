@@ -13,7 +13,7 @@ export function AccessCode() {
           event.preventDefault()
           setAccessCode(code)
         }}
-        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-slate-900"
+        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-ink-800"
       >
         <div className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10">
           <KeyRound size={20} />
@@ -25,7 +25,7 @@ export function AccessCode() {
           type="password"
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 dark:border-slate-700"
+          className="w-full rounded-lg border border-slate-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-brand-500 dark:border-white/10"
           placeholder="Access code"
         />
         <button type="submit" disabled={!code.trim()} className="mt-3 w-full rounded-lg bg-brand-600 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">

@@ -1,160 +1,164 @@
 import clsx from 'clsx'
-import { AlertCircle, Bot, RefreshCw, SendHorizonal, Sparkles, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { retryPlan, useStore } from '../store'
-import { TripSummary } from './TripSummary'
+import { AlertTriangle, RefreshCw, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { useStore } from '../store'
+import { Composer } from './Composer'
+import { MessageContent } from './MessageContent'
+import { useProgress } from '../lib/progress'
 
-const STARTERS = [
-  'Plan a 4 day trip from Ahmedabad to Goa for 2 people under ₹60,000, beaches and food',
-  'A relaxed week in Paris from London in December for 2, budget 3000 EUR, museums',
-  'Mumbai to Jaipur by train, 3 days, 2 people, ₹40,000, history',
-  '5 days from Delhi to Dubai for a family of 4, 2 lakh, shopping',
+const AFTER_PLAN = [
+  { label: 'Premium', send: 'premium' },
+  { label: 'Budget', send: 'budget' },
+  { label: 'By train', send: 'by train' },
+  { label: 'More relaxed', send: 'more relaxed' },
+  { label: 'More activities', send: 'more activities' },
+  { label: 'Add beaches', send: 'add beaches' },
 ]
-const CHANGES = ['Premium', 'Budget', 'By train', 'More relaxed', 'More activities', '+1 day', 'Add beaches']
+const FEASIBILITY = [
+  { label: 'Yes, apply suggestions', send: 'yes' },
+  { label: 'Continue as is', send: 'continue' },
+]
+
+function time(at?: string) {
+  if (!at) return ''
+  const date = new Date(at)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function AssistantAvatar({ small = false }: { small?: boolean }) {
+  return (
+    <div className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm', small ? 'h-7 w-7' : 'h-9 w-9')}>
+      <Sparkles size={small ? 13 : 16} />
+    </div>
+  )
+}
 
 export function ChatPanel() {
-  const { messages, status, error, send, dismissError, plan, session } = useStore()
-  const [text, setText] = useState('')
+  const { messages, status, error, notice, send, retry, dismissError, plan, session } = useStore()
   const listRef = useRef<HTMLDivElement>(null)
   const busy = status !== 'idle'
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages.length, status])
+  }, [messages.length, status, error])
 
-  const submit = (value: string) => {
-    if (!value.trim() || busy) return
-    void send(value)
-    setText('')
-  }
-
-  const quickChange = (label: string) => {
-    if (label === '+1 day') {
-      const days = plan?.duration.days
-      submit(days ? `${days + 1} days` : '5 days')
-    } else {
-      submit(label.toLowerCase())
-    }
-  }
+  const quick = busy ? [] : session?.stage === 'feasibility' ? FEASIBILITY : plan && session?.stage === 'planned' ? AFTER_PLAN : []
+  const daysChip = plan?.duration.days && session?.stage === 'planned' && !busy ? [{ label: `${plan.duration.days + 1} days`, send: `${plan.duration.days + 1} days` }] : []
+  const progress = useProgress()
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div ref={listRef} className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.map((message, index) => (
-          <div key={index} className={clsx('flex gap-2.5', message.role === 'user' && 'justify-end')}>
-            {message.role === 'assistant' && (
-              <div className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-                <Bot size={15} />
-              </div>
-            )}
-            <div
-              className={clsx(
-                'max-w-[85%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
-                message.role === 'user'
-                  ? 'rounded-br-md bg-brand-600 text-white'
-                  : 'rounded-bl-md bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100',
-              )}
-            >
-              {message.content}
-            </div>
+    <div className="flex h-full min-h-0 flex-col bg-white dark:bg-ink-900">
+      <div className="flex items-center gap-3 border-b border-slate-200/80 px-4 py-3 dark:border-white/10">
+        <AssistantAvatar />
+        <div className="min-w-0 flex-1">
+          <div className="font-display text-sm font-bold text-slate-900 dark:text-white">Travel assistant</div>
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <span className={clsx('h-1.5 w-1.5 rounded-full', busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-500')} />
+            {status === 'planning' ? 'Building your plan…' : status === 'thinking' ? 'Typing…' : 'Online · replies in seconds'}
           </div>
-        ))}
-        {busy && (
-          <div className="flex items-center gap-2.5 text-sm text-slate-500 dark:text-slate-400">
-            <div className="grid h-7 w-7 place-items-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">
-              <Bot size={15} />
+        </div>
+      </div>
+
+      <div ref={listRef} className="scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite">
+        {messages.map((message, index) => {
+          const previous = messages[index - 1]
+          const grouped = previous?.role === message.role
+          if (message.role === 'user') {
+            return (
+              <div key={index} className="flex animate-fade-up flex-col items-end">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm">
+                  {message.content}
+                </div>
+                {time(message.at) && <span className="mt-1 text-[11px] text-slate-400">{time(message.at)}</span>}
+              </div>
+            )
+          }
+          return (
+            <div key={index} className="flex animate-fade-up gap-2.5">
+              <div className="w-7 shrink-0">{!grouped && <AssistantAvatar small />}</div>
+              <div className="min-w-0 max-w-[88%]">
+                <div className="rounded-2xl rounded-tl-md border border-slate-200/80 bg-slate-50 px-4 py-3 text-[15px] leading-relaxed text-slate-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-100">
+                  <MessageContent text={message.content} />
+                </div>
+                {time(message.at) && <span className="mt-1 block text-[11px] text-slate-400">{time(message.at)}</span>}
+              </div>
             </div>
-            <span className="flex gap-1">
+          )
+        })}
+
+        {status === 'thinking' && (
+          <div className="flex gap-2.5">
+            <AssistantAvatar small />
+            <div className="flex items-center gap-1 rounded-2xl rounded-tl-md border border-slate-200/80 bg-slate-50 px-4 py-3.5 text-slate-400 dark:border-white/10 dark:bg-ink-800">
               {[0, 1, 2].map((i) => (
-                <span key={i} className="typing-dot h-1.5 w-1.5 rounded-full bg-current" style={{ animationDelay: `${i * 0.15}s` }} />
+                <span key={i} className="typing-dot h-2 w-2 rounded-full bg-current" style={{ animationDelay: `${i * 0.15}s` }} />
               ))}
-            </span>
-            {status === 'planning' ? 'Planning your trip…' : 'Thinking…'}
+            </div>
           </div>
         )}
-        {messages.length === 1 && !busy && (
-          <div className="space-y-2 pt-2">
-            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <Sparkles size={13} /> Try one of these
+
+        {status === 'planning' && (
+          <div className="flex gap-2.5">
+            <AssistantAvatar small />
+            <div className="w-full max-w-[88%] rounded-2xl rounded-tl-md border border-brand-200 bg-brand-50/70 px-4 py-3 dark:border-brand-400/30 dark:bg-brand-500/10">
+              <div className="flex items-center justify-between text-sm font-semibold text-brand-800 dark:text-brand-200">
+                <span>Planning your trip</span>
+                <span className="text-xs font-medium">{progress.finished} of {progress.total} steps</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-100 dark:bg-white/10">
+                <div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${Math.max(5, (progress.finished / Math.max(progress.total, 1)) * 100)}%` }} />
+              </div>
+              <p className="mt-2 text-xs text-brand-700/80 dark:text-brand-200/80">{notice ?? 'Comparing transport, hotels, weather and places — usually under a minute.'}</p>
             </div>
-            {STARTERS.map((starter) => (
-              <button
-                key={starter}
-                onClick={() => submit(starter)}
-                className="block w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 dark:border-slate-700 dark:text-slate-300 dark:hover:border-brand-500/50 dark:hover:bg-brand-500/10"
-              >
-                {starter}
-              </button>
-            ))}
+          </div>
+        )}
+
+        {error && (
+          <div className="flex gap-2.5">
+            <div className="w-7 shrink-0" />
+            <div className="w-full max-w-[88%] rounded-2xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-800 dark:border-rose-400/30 dark:bg-rose-500/10 dark:text-rose-200">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                <div className="flex-1">{error}</div>
+                <button onClick={dismissError} aria-label="Dismiss" className="opacity-60 hover:opacity-100">
+                  <X size={15} />
+                </button>
+              </div>
+              {session?.stage === 'ready' && (
+                <button
+                  onClick={() => void retry()}
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                >
+                  <RefreshCw size={13} /> Try planning again
+                </button>
+              )}
+              {session?.stage !== 'ready' && <p className="mt-1.5 text-xs opacity-80">Your message wasn't lost — just send it again.</p>}
+            </div>
           </div>
         )}
       </div>
 
-      <TripSummary />
-
-      {error && (
-        <div className="mx-4 mb-2 flex items-start gap-2 rounded-xl bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          <div className="flex-1">
-            {error}
-            {session?.stage === 'ready' && (
-              <button onClick={() => void retryPlan()} className="ml-2 inline-flex items-center gap-1 font-semibold underline">
-                <RefreshCw size={13} /> Try again
-              </button>
-            )}
-          </div>
-          <button onClick={dismissError} aria-label="Dismiss">
-            <X size={15} />
-          </button>
-        </div>
-      )}
-
-      {plan && !busy && (
-        <div className="scroll-thin flex gap-1.5 overflow-x-auto px-4 pb-2">
-          {CHANGES.map((label) => (
+      {(quick.length > 0 || daysChip.length > 0) && (
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2.5">
+          {[...quick, ...daysChip].map((chip) => (
             <button
-              key={label}
-              onClick={() => quickChange(label)}
-              className="shrink-0 rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-brand-300 hover:text-brand-700 dark:border-slate-700 dark:text-slate-300 dark:hover:text-brand-300"
+              key={chip.label}
+              onClick={() => void send(chip.send)}
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
-              {label}
+              {chip.label}
             </button>
           ))}
         </div>
       )}
 
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          submit(text)
-        }}
-        className="border-t border-slate-200 p-3 dark:border-slate-800"
-      >
-        <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-1.5 focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-900">
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                submit(text)
-              }
-            }}
-            rows={1}
-            placeholder={plan ? 'Change something… e.g. "by train" or "budget 80000 INR"' : 'Describe your trip…'}
-            className="max-h-32 min-h-[40px] flex-1 resize-none bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-slate-400"
-            disabled={busy}
-          />
-          <button
-            type="submit"
-            disabled={busy || !text.trim()}
-            aria-label="Send"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-600 text-white transition hover:bg-brand-700 disabled:opacity-40"
-          >
-            <SendHorizonal size={17} />
-          </button>
-        </div>
-      </form>
+      <div className="border-t border-slate-200/80 bg-white/90 px-3 pb-3 pt-3 backdrop-blur dark:border-white/10 dark:bg-ink-900/90">
+        <Composer
+          onSend={(text) => void send(text)}
+          busy={busy}
+          placeholder={plan ? 'Ask for a change, e.g. "by train"' : 'Type your reply…'}
+        />
+      </div>
     </div>
   )
 }

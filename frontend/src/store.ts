@@ -12,103 +12,125 @@ interface State {
   plan: Plan | null
   events: AgentEvent[]
   status: Status
+  notice: string | null
   error: string | null
   accessCode: string | null
   needsAccessCode: boolean
   send: (text: string) => Promise<void>
+  retry: () => Promise<void>
   reset: () => void
   setAccessCode: (code: string) => void
   setNeedsAccessCode: (value: boolean) => void
   dismissError: () => void
 }
 
-const WELCOME: ChatMessage = {
+const now = () => new Date().toISOString()
+
+export const WELCOME: ChatMessage = {
   role: 'assistant',
   content:
-    "Hi! Tell me about the trip you have in mind — where from, where to, how long, your budget and who's coming. " +
-    "I'll ask for anything I still need, check it's realistic, then plan transport, hotels, weather and a full timetable.",
+    "Hi, I'm your WorldTour travel assistant. Tell me where you'd like to go, from where, for how long, your budget and who's coming.\n\n" +
+    "I'll ask for anything missing, check the trip is realistic, then plan transport, hotels, weather and an hour-by-hour itinerary.",
 }
 
 export const useStore = create<State>()(
   persist(
-    (set, get) => ({
-      messages: [WELCOME],
-      session: null,
-      summary: null,
-      plan: null,
-      events: [],
-      status: 'idle',
-      error: null,
-      accessCode: null,
-      needsAccessCode: false,
+    (set, get) => {
+      const plan = async (session: Session) => {
+        set({ status: 'planning', events: [], notice: null })
+        const result = await runPlan(
+          session,
+          get().accessCode,
+          (event) => set((s) => ({ events: [...s.events, event] })),
+          () => set({ events: [], notice: 'The connection dropped — restarting the plan…' }),
+        )
+        set((s) => ({
+          plan: result.plan,
+          session: result.session,
+          status: 'idle',
+          notice: null,
+          messages: [
+            ...s.messages,
+            {
+              role: 'assistant',
+              at: now(),
+              content:
+                'Your plan is ready! Explore it on the right. To change anything, just tell me — for example "premium", "by train", "more relaxed", "5 days" or "remove <place>".',
+            },
+          ],
+        }))
+      }
 
-      send: async (text: string) => {
-        const message = text.trim()
-        if (!message || get().status !== 'idle') return
-        set((s) => ({ messages: [...s.messages, { role: 'user', content: message }], status: 'thinking', error: null }))
-        try {
-          const response = await sendChat(get().session, message, get().accessCode)
-          set((s) => ({
-            messages: [...s.messages, { role: 'assistant', content: response.reply }],
-            session: response.session,
-            summary: response.summary ?? s.summary,
-          }))
-          if (!response.ready) {
-            set({ status: 'idle' })
-            return
+      const handleError = (error: unknown) => {
+        const status = error instanceof ApiError ? error.status : 0
+        if (status === 401) set({ needsAccessCode: true })
+        set({ status: 'idle', notice: null, error: error instanceof Error ? error.message : 'Something went wrong. Please try again.' })
+      }
+
+      return {
+        messages: [WELCOME],
+        session: null,
+        summary: null,
+        plan: null,
+        events: [],
+        status: 'idle',
+        notice: null,
+        error: null,
+        accessCode: null,
+        needsAccessCode: false,
+
+        send: async (text: string) => {
+          const message = text.trim()
+          if (!message || get().status !== 'idle') return
+          set((s) => ({ messages: [...s.messages, { role: 'user', content: message, at: now() }], status: 'thinking', error: null }))
+          try {
+            const response = await sendChat(get().session, message, get().accessCode)
+            set((s) => ({
+              messages: [...s.messages, { role: 'assistant', content: response.reply, at: now() }],
+              session: response.session,
+              summary: response.summary ?? s.summary,
+            }))
+            if (!response.ready) {
+              set({ status: 'idle' })
+              return
+            }
+            await plan(response.session)
+          } catch (error) {
+            // If the chat failed before an answer, drop the unanswered message so it can be re-sent cleanly.
+            if (get().status === 'thinking') {
+              set((s) => ({ messages: s.messages.at(-1)?.role === 'user' ? s.messages.slice(0, -1) : s.messages }))
+            }
+            handleError(error)
           }
-          set({ status: 'planning', events: [] })
-          const result = await runPlan(response.session, get().accessCode, (event) =>
-            set((s) => ({ events: [...s.events, event] })),
-          )
-          set((s) => ({
-            plan: result.plan,
-            session: result.session,
-            status: 'idle',
-            messages: [
-              ...s.messages,
-              {
-                role: 'assistant',
-                content:
-                  'Your plan is ready! You can keep chatting to change it — try "premium", "by train", ' +
-                  '"more relaxed", "5 days", "budget 80000 INR" or "remove <place>".',
-              },
-            ],
-          }))
-        } catch (error) {
-          const status = error instanceof ApiError ? error.status : 0
-          if (status === 401) set({ needsAccessCode: true })
-          set((s) => ({
-            status: 'idle',
-            error: error instanceof Error ? error.message : 'Something went wrong.',
-            // A failed planning step leaves the chat ready to try the same trip again.
-            session: s.session?.stage === 'ready' ? { ...s.session, stage: 'ready' } : s.session,
-          }))
-        }
-      },
+        },
 
-      reset: () => set({ messages: [WELCOME], session: null, summary: null, plan: null, events: [], status: 'idle', error: null }),
-      setAccessCode: (code) => set({ accessCode: code.trim() || null, needsAccessCode: false, error: null }),
-      setNeedsAccessCode: (value) => set({ needsAccessCode: value }),
-      dismissError: () => set({ error: null }),
-    }),
+        retry: async () => {
+          const { session } = get()
+          if (!session || session.stage !== 'ready' || get().status !== 'idle') return
+          set({ error: null })
+          try {
+            await plan(session)
+          } catch (error) {
+            handleError(error)
+          }
+        },
+
+        reset: () =>
+          set({ messages: [WELCOME], session: null, summary: null, plan: null, events: [], status: 'idle', error: null, notice: null }),
+        setAccessCode: (code) => set({ accessCode: code.trim() || null, needsAccessCode: false, error: null }),
+        setNeedsAccessCode: (value) => set({ needsAccessCode: value }),
+        dismissError: () => set({ error: null }),
+      }
+    },
     {
       name: 'worldtour-session',
+      version: 2,
+      migrate: (state) => state as State,
       // Keep the conversation and plan across reloads, but never resume mid-request.
       partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, accessCode: s.accessCode }),
     },
   ),
 )
 
-/** Retry planning after an error, when the chat had already collected a complete trip. */
-export async function retryPlan(): Promise<void> {
-  const { session, accessCode } = useStore.getState()
-  if (!session || session.stage !== 'ready') return
-  useStore.setState({ status: 'planning', events: [], error: null })
-  try {
-    const result = await runPlan(session, accessCode, (event) => useStore.setState((s) => ({ events: [...s.events, event] })))
-    useStore.setState({ plan: result.plan, session: result.session, status: 'idle' })
-  } catch (error) {
-    useStore.setState({ status: 'idle', error: error instanceof Error ? error.message : 'Planning failed.' })
-  }
-}
+/** True once the traveler has said something (the landing page gives way to the workspace). */
+export const useStarted = () => useStore((s) => s.messages.some((m) => m.role === 'user') || !!s.plan)

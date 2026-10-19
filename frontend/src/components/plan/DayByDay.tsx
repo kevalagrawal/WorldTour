@@ -23,7 +23,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
             onClick={() => setSelected(index)}
             className={clsx(
               'shrink-0 rounded-xl border px-3 py-2 text-left transition',
-              index === selected ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white hover:border-brand-300 dark:border-slate-700 dark:bg-slate-900',
+              index === selected ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white hover:border-brand-300 dark:border-white/10 dark:bg-ink-800',
             )}
           >
             <div className="text-xs font-semibold opacity-80">Day {d.day}</div>
@@ -33,7 +33,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
+        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-slate-100 p-4 dark:border-white/10">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{day.title}</h2>
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
@@ -43,7 +43,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
             </div>
           </div>
           {weather && (
-            <div className="rounded-xl bg-slate-50 px-3 py-1.5 text-sm dark:bg-slate-800">
+            <div className="rounded-xl bg-slate-50 px-3 py-1.5 text-sm dark:bg-white/5">
               {weatherEmoji(weather.condition)} {Math.round(weather.temp_max_c ?? 0)}°/{Math.round(weather.temp_min_c ?? 0)}° · 💧{weather.precipitation_probability ?? 0}%
             </div>
           )}
@@ -58,7 +58,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
             </div>
             <div>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Timetable</div>
-              <ol className="relative space-y-0.5 border-l-2 border-slate-200 pl-4 dark:border-slate-700">
+              <ol className="relative space-y-0.5 border-l-2 border-slate-200 pl-4 dark:border-white/10">
                 {day.activities.map((activity) => (
                   <TimelineItem key={activity.activity_id} activity={activity} display={display} />
                 ))}
@@ -82,7 +82,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
 
 function Part({ icon, label, text }: { icon: ReactNode; label: string; text: string }) {
   return (
-    <div className="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+    <div className="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-white/5">
       <span className="mt-0.5 text-amber-500">{icon}</span>
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
@@ -99,8 +99,8 @@ function TimelineItem({ activity, display }: { activity: Activity; display: Disp
     <li className={clsx('relative py-1.5', transfer && 'opacity-80')}>
       <span
         className={clsx(
-          'absolute -left-[27px] top-2 grid h-5 w-5 place-items-center rounded-full ring-4 ring-white dark:ring-slate-900',
-          transfer ? 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300' : 'bg-brand-600 text-white',
+          'absolute -left-[27px] top-2 grid h-5 w-5 place-items-center rounded-full ring-4 ring-white dark:ring-ink-800',
+          transfer ? 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300' : 'bg-brand-600 text-white',
         )}
       >
         {icon}

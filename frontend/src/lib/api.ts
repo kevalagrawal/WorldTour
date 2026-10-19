@@ -1,19 +1,56 @@
 import type { AgentEvent, ChatResponse, Plan, Session } from './types'
 
-// In production VITE_API_URL is the backend's address (e.g. https://worldtour-api.vercel.app).
+// In production VITE_API_URL is the backend's address (e.g. https://world-tour-nine.vercel.app).
 // In development it is empty and Vite proxies /api to the local Python server.
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? ''
 
+const NETWORK_MESSAGE = "We couldn't reach the planner just now. It's usually a brief network hiccup — please try again."
+const RETRYABLE = new Set([502, 503, 504])
+
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** True when the request never got a usable answer (offline, dropped, timed out). */
+  network: boolean
+  constructor(message: string, status: number, network = false) {
     super(message)
     this.status = status
+    this.network = network
   }
 }
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 function headers(accessCode: string | null): HeadersInit {
   return { 'Content-Type': 'application/json', ...(accessCode ? { 'X-Access-Code': accessCode } : {}) }
+}
+
+/**
+ * fetch with a time limit and automatic retries.
+ * Retries on network failures (offline, dropped connection, cold start) and on 502/503/504
+ * from the hosting edge, with a short back-off. Other HTTP errors are returned as-is.
+ */
+async function request(path: string, init: RequestInit, { retries = 2, timeoutMs = 60000 } = {}): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    try {
+      const response = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal })
+      clearTimeout(timer)
+      if (RETRYABLE.has(response.status) && attempt < retries) {
+        await wait(800 * 2 ** attempt)
+        continue
+      }
+      return response
+    } catch (error) {
+      clearTimeout(timer)
+      if (attempt < retries) {
+        await wait(800 * 2 ** attempt)
+        continue
+      }
+      const timedOut = error instanceof DOMException && error.name === 'AbortError'
+      throw new ApiError(timedOut ? 'The planner took too long to answer. Please try again.' : NETWORK_MESSAGE, 0, true)
+    }
+  }
 }
 
 async function fail(response: Response): Promise<never> {
@@ -22,38 +59,34 @@ async function fail(response: Response): Promise<never> {
     const body = await response.json()
     if (body?.detail) detail = String(body.detail)
   } catch {
-    /* keep the generic message */
+    if (RETRYABLE.has(response.status)) detail = NETWORK_MESSAGE
   }
-  throw new ApiError(detail, response.status)
+  throw new ApiError(detail, response.status, RETRYABLE.has(response.status))
 }
 
 export async function health(): Promise<{ status: string; access_code_required: boolean }> {
-  const response = await fetch(`${BASE}/api/health`)
+  const response = await request('/api/health', {}, { retries: 1, timeoutMs: 20000 })
   if (!response.ok) await fail(response)
   return response.json()
 }
 
 export async function sendChat(session: Session | null, message: string, accessCode: string | null): Promise<ChatResponse> {
-  const response = await fetch(`${BASE}/api/chat`, {
-    method: 'POST',
-    headers: headers(accessCode),
-    body: JSON.stringify({ session, message }),
-  })
+  // The chat step is stateless (the session travels with the request), so retrying is safe.
+  const response = await request(
+    '/api/chat',
+    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message }) },
+    { retries: 2, timeoutMs: 60000 },
+  )
   if (!response.ok) await fail(response)
   return response.json()
 }
 
-/** Runs the workflow. Progress events arrive one per line (NDJSON) while the plan is built. */
-export async function runPlan(
-  session: Session,
-  accessCode: string | null,
-  onEvent: (event: AgentEvent) => void,
-): Promise<{ plan: Plan; session: Session }> {
-  const response = await fetch(`${BASE}/api/plan`, {
-    method: 'POST',
-    headers: headers(accessCode),
-    body: JSON.stringify({ session }),
-  })
+async function planOnce(session: Session, accessCode: string | null, onEvent: (event: AgentEvent) => void) {
+  const response = await request(
+    '/api/plan',
+    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session }) },
+    { retries: 2, timeoutMs: 330000 },
+  )
   if (!response.ok || !response.body) await fail(response)
   const reader = response.body!.getReader()
   const decoder = new TextDecoder()
@@ -65,26 +98,48 @@ export async function runPlan(
     if (message.type === 'event') onEvent(message.event)
     else if (message.type === 'plan') result = { plan: message.plan, session: message.session }
     else if (message.type === 'error') throw new ApiError(message.message, 500)
+    // "ping" lines only keep the connection alive.
   }
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-    lines.forEach(handle)
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      lines.forEach(handle)
+    }
+    handle(buffer)
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(NETWORK_MESSAGE, 0, true)
   }
-  handle(buffer)
-  if (!result) throw new ApiError('The planner stopped before finishing. Please try again.', 500)
-  return result
+  if (!result) throw new ApiError(NETWORK_MESSAGE, 0, true)
+  return result as { plan: Plan; session: Session }
+}
+
+/**
+ * Runs the workflow. Progress events arrive one per line (NDJSON) while the plan is built.
+ * If the connection drops before the plan arrives, it starts again once automatically.
+ */
+export async function runPlan(
+  session: Session,
+  accessCode: string | null,
+  onEvent: (event: AgentEvent) => void,
+  onRestart?: () => void,
+): Promise<{ plan: Plan; session: Session }> {
+  try {
+    return await planOnce(session, accessCode, onEvent)
+  } catch (error) {
+    if (!(error instanceof ApiError) || !error.network) throw error
+    onRestart?.()
+    await wait(1000)
+    return planOnce(session, accessCode, onEvent)
+  }
 }
 
 export async function downloadExport(kind: 'text' | 'ics', plan: Plan): Promise<void> {
-  const response = await fetch(`${BASE}/api/export/${kind}`, {
-    method: 'POST',
-    headers: headers(null),
-    body: JSON.stringify({ plan }),
-  })
+  const response = await request(`/api/export/${kind}`, { method: 'POST', headers: headers(null), body: JSON.stringify({ plan }) })
   if (!response.ok) await fail(response)
   const blob = await response.blob()
   const match = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')
@@ -93,4 +148,10 @@ export async function downloadExport(kind: 'text' | 'ics', plan: Plan): Promise<
   const link = Object.assign(document.createElement('a'), { href: url, download: name })
   link.click()
   URL.revokeObjectURL(url)
+}
+
+export async function exportText(plan: Plan): Promise<string> {
+  const response = await request('/api/export/text', { method: 'POST', headers: headers(null), body: JSON.stringify({ plan }) })
+  if (!response.ok) await fail(response)
+  return response.text()
 }

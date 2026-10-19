@@ -62,11 +62,11 @@ export function BookExport({ plan }: { plan: Plan; display: Display }) {
             onClick={() => void download('ics')}
             disabled={!!busy || !plan.dates.start_date}
             title={plan.dates.start_date ? 'Add every timetable item to your calendar' : 'Add travel dates to get a calendar file'}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5"
           >
             <CalendarPlus size={15} /> {busy === 'ics' ? 'Preparing…' : 'Add to calendar (.ics)'}
           </button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5">
             Print
           </button>
         </div>

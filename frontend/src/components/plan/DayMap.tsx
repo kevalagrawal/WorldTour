@@ -31,7 +31,7 @@ export function DayMap({ day }: { day: ItineraryDay }) {
   }
   if (stops.length === 0) {
     return (
-      <div className="grid h-full min-h-[260px] place-items-center rounded-xl bg-slate-100 text-sm text-slate-500 dark:bg-slate-800">
+      <div className="grid h-full min-h-[260px] place-items-center rounded-xl bg-slate-100 text-sm text-slate-500 dark:bg-white/5">
         No mapped stops for this day
       </div>
     )

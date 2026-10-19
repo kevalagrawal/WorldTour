@@ -17,7 +17,7 @@ export function Costs({ plan, display }: { plan: Plan; display: Display }) {
     <div className="grid gap-4 lg:grid-cols-5">
       <Card className="p-4 lg:col-span-3">
         <SectionTitle icon={<PieIcon size={18} />} title={`Cost estimate${recommended ? ` — ${recommended.label} package` : ''}`} subtitle="Planning estimates in your currency" />
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+        <div className="divide-y divide-slate-100 dark:divide-white/5">
           {rows.map((row, index) => (
             <div key={row.category} className="flex items-start gap-3 py-2.5">
               <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COLORS[index % COLORS.length] }} />
@@ -48,7 +48,7 @@ export function Costs({ plan, display }: { plan: Plan; display: Display }) {
                   : `${formatMoney(Math.abs(plan.remaining_budget ?? 0), display)} over budget`}
               </span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/5">
               <div
                 className={used >= 100 ? 'h-full bg-rose-500' : used > 85 ? 'h-full bg-amber-500' : 'h-full bg-emerald-500'}
                 style={{ width: `${used}%` }}

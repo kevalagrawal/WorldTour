@@ -20,12 +20,14 @@ import hmac
 import json
 import logging
 import os
+import queue
+import threading
 from datetime import date
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from worldtour_ai.services.chat_session import chat_step
@@ -34,14 +36,33 @@ from worldtour_ai.workflows.state import fresh_state
 from worldtour_ai.workflows.travel_graph import build_workflow
 
 app = FastAPI(title="WorldTour API", version="1.0.0")
+logger = logging.getLogger("worldtour.web")
+
+
+@app.middleware("http")
+async def json_errors(request: Request, call_next):
+    """Turn unexpected crashes into JSON 500s *inside* the CORS layer.
+
+    Without this, an unhandled error is answered by the outermost server-error handler
+    without CORS headers, and the browser reports it as a generic network failure.
+    Registered before CORSMiddleware so CORS wraps it.
+    """
+    try:
+        return await call_next(request)
+    except Exception:
+        logger.exception("unhandled error on %s", request.url.path)
+        return JSONResponse({"detail": "The planner hit an unexpected error. Please try again."}, status_code=500)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-Access-Code"],
+    expose_headers=["Content-Disposition"],  # lets the browser read download file names cross-site
 )
 _WORKFLOW = None
-logger = logging.getLogger("worldtour.web")
+HEARTBEAT_SECONDS = 5
 
 
 def _workflow():
@@ -131,7 +152,7 @@ def plan(body: PlanBody, request: Request) -> StreamingResponse:
     history = session.get("history") or []
     first = next((m["content"] for m in history if m.get("role") == "user"), "trip")
 
-    def stream():
+    def run(out: queue.Queue) -> None:
         seen, final = 0, None
         try:
             state = fresh_state(first, history, trip, ready=True)
@@ -139,16 +160,36 @@ def plan(body: PlanBody, request: Request) -> StreamingResponse:
                 final = snapshot
                 events = snapshot.get("agent_execution_history") or []
                 for event in events[seen:]:
-                    yield json.dumps({"type": "event", "event": event}) + "\n"
+                    out.put(("event", event))
                 seen = len(events)
-            plan_data = (final or {}).get("final_plan")
-            if not plan_data:
-                yield json.dumps({"type": "error", "message": "The planner finished without a plan."}) + "\n"
-                return
-            done = {**session, "stage": "planned"}
-            yield json.dumps({"type": "plan", "plan": plan_data, "session": done}, default=str) + "\n"
+            out.put(("done", (final or {}).get("final_plan")))
         except Exception as exc:  # report, don't hang the browser
-            yield json.dumps({"type": "error", "message": f"Planning failed: {exc}"}) + "\n"
+            logger.exception("planning failed")
+            out.put(("error", f"Planning failed: {exc}"))
+
+    def stream():
+        # The workflow runs in a thread; while a slow step (e.g. the AI writer) is busy, a small
+        # "ping" line every few seconds keeps proxies and browsers from dropping an idle connection.
+        out: queue.Queue = queue.Queue()
+        threading.Thread(target=run, args=(out,), daemon=True).start()
+        while True:
+            try:
+                kind, payload = out.get(timeout=HEARTBEAT_SECONDS)
+            except queue.Empty:
+                yield json.dumps({"type": "ping"}) + "\n"
+                continue
+            if kind == "event":
+                yield json.dumps({"type": "event", "event": payload}, default=str) + "\n"
+            elif kind == "error":
+                yield json.dumps({"type": "error", "message": payload}) + "\n"
+                return
+            else:
+                if not payload:
+                    yield json.dumps({"type": "error", "message": "The planner finished without a plan."}) + "\n"
+                else:
+                    done = {**session, "stage": "planned"}
+                    yield json.dumps({"type": "plan", "plan": payload, "session": done}, default=str) + "\n"
+                return
 
     return StreamingResponse(stream(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 

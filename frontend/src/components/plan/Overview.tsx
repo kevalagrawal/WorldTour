@@ -32,7 +32,7 @@ function Packages({ plan, display }: { plan: Plan; display: Display }) {
               key={pkg.name}
               className={clsx(
                 'flex flex-col rounded-xl border p-4 transition',
-                chosen ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500 dark:bg-brand-500/10' : 'border-slate-200 dark:border-slate-700',
+                chosen ? 'border-brand-500 bg-brand-50/60 ring-1 ring-brand-500 dark:bg-brand-500/10' : 'border-slate-200 dark:border-white/10',
               )}
             >
               <div className="flex items-center justify-between">
@@ -102,7 +102,7 @@ function GettingThere({ plan, display }: { plan: Plan; display: Display }) {
                 key={option.option_id}
                 className={clsx(
                   'flex items-center gap-3 rounded-xl border p-3',
-                  choice?.option_id === option.option_id ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10' : 'border-slate-200 dark:border-slate-700',
+                  choice?.option_id === option.option_id ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10' : 'border-slate-200 dark:border-white/10',
                 )}
               >
                 <ModeIcon kind={option.kind} />
@@ -140,7 +140,7 @@ function FlightList({ title, flights, chosen, display }: { title: string; flight
         {flights.slice(0, 4).map((flight) => (
           <div
             key={flight.option_id}
-            className={clsx('rounded-xl border p-3 text-sm', flight.option_id === chosen ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10' : 'border-slate-200 dark:border-slate-700')}
+            className={clsx('rounded-xl border p-3 text-sm', flight.option_id === chosen ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-500/10' : 'border-slate-200 dark:border-white/10')}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-slate-900 dark:text-white">{flight.airline || 'Flight'}</span>
@@ -178,7 +178,7 @@ function Hotels({ plan, display }: { plan: Plan; display: Display }) {
       <SectionTitle icon={<BedDouble size={18} />} title="Hotels" subtitle="Live rates for your dates where available; ★ is in the selected package." />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {hotels.map((hotel) => (
-          <div key={hotel.option_id} className={clsx('rounded-xl border p-3', chosen.has(hotel.option_id) ? 'border-brand-500 ring-1 ring-brand-500' : 'border-slate-200 dark:border-slate-700')}>
+          <div key={hotel.option_id} className={clsx('rounded-xl border p-3', chosen.has(hotel.option_id) ? 'border-brand-500 ring-1 ring-brand-500' : 'border-slate-200 dark:border-white/10')}>
             <div className="flex items-start justify-between gap-2">
               <div className="text-sm font-semibold leading-snug text-slate-900 dark:text-white">{hotel.name}</div>
               {chosen.has(hotel.option_id) && <Badge tone="brand">★ Selected</Badge>}
@@ -218,7 +218,7 @@ function Weather({ plan }: { plan: Plan }) {
       {weather.dates_assumed && <p className="mb-2 text-xs text-amber-600">No travel dates were given, so the next few days are shown as a guide.</p>}
       <div className="scroll-thin flex gap-2 overflow-x-auto pb-1">
         {weather.days.map((day) => (
-          <div key={`${day.day}-${day.date}`} className="min-w-[110px] rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-800/60">
+          <div key={`${day.day}-${day.date}`} className="min-w-[110px] rounded-xl bg-slate-50 p-3 text-center dark:bg-white/5">
             <div className="text-xs font-semibold text-slate-500">Day {day.day}</div>
             <div className="text-xs text-slate-400">{prettyDate(day.date)}</div>
             <div className="my-1 text-2xl">{weatherEmoji(day.condition)}</div>

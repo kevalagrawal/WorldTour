@@ -11,6 +11,9 @@ memory is needed between requests (which suits serverless hosting). Stages:
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
+from worldtour_ai.config.settings import get_settings
 from worldtour_ai.schemas.models import TravelRequest
 from worldtour_ai.services.intake import (
     MAX_ROUNDS,
@@ -69,7 +72,7 @@ def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
         request = parse_travel_text(text or "trip", use_llm=False)
         data = request.model_dump()
         if use_llm:
-            merge_grounded(data, grounded_llm_fields(text))
+            merge_grounded(data, _llm_fields_within_limit(text))
         request = TravelRequest.model_validate(data)
     elif user_skipped(text):
         session["skipped"] = [*session.get("skipped", []), *(f for f in session.get("pending", []) if f not in _OPTIONAL)]
@@ -85,6 +88,22 @@ def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
     trim_suggested_cities(data)
     session.update(request=data, pending=[])
     return _check_feasibility(session, history, changes, round_number=0)
+
+
+def _llm_fields_within_limit(text: str) -> dict | None:
+    """The AI reading of the first message, but never longer than PARSER_LLM_WAIT_SECONDS.
+
+    The heuristic parse already has the essentials, so a slow free model must not
+    keep the user waiting for the first reply.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(grounded_llm_fields, text)
+    try:
+        return future.result(timeout=get_settings().parser_llm_wait_seconds)
+    except Exception:
+        return None
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _check_feasibility(session: dict, history: list[dict], changes: list[str], round_number: int) -> dict:
