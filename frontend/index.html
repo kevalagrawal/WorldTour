@@ -19,6 +19,7 @@
     <link rel="alternate" hreflang="x-default" href="https://worldtour-xi.vercel.app/" />
 
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preload" as="image" href="/logo-globe.svg" type="image/svg+xml" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
@@ -128,10 +129,7 @@
       #boot { display: none; }
       .js #boot { display: grid; place-items: center; min-height: 100vh; background: #f4f6f9; }
       .js.dark #boot { background: #0a111d; }
-      #boot svg { width: 56px; height: 56px; animation: boot-pulse 1.2s ease-in-out infinite; }
-      @keyframes boot-pulse { 50% { opacity: 0.55; transform: scale(0.94); } }
-      @media (prefers-reduced-motion: reduce) { #boot svg { animation: none; } }
-    </style>
+          </style>
     <script>
       document.documentElement.classList.add('js')
       // Apply the saved theme before first paint to avoid a flash.
@@ -146,7 +144,7 @@
     <!-- Readable content for search engines and slow connections; React replaces it on load. -->
     <div id="root">
       <div id="boot" role="status" aria-label="Loading WorldTour">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#10284d"/><g fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="18"/><path d="M15.2 26h33.6M15.2 38h33.6M32 14a28 28 0 0 1 0 36M32 14a28 28 0 0 0 0 36"/></g><circle cx="52" cy="12" r="7" fill="#ee8a1f" stroke="#10284d" stroke-width="3"/></svg>
+        <img src="/logo-globe.svg" alt="" width="88" height="88" />
       </div>
       <main id="seo-content" style="max-width: 960px; margin: 0 auto; padding: 48px 20px; font-family: Inter, system-ui, sans-serif; color: #0f172a">
         <h1>Free AI Trip Planner &amp; Itinerary Generator</h1>

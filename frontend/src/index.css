@@ -70,10 +70,20 @@ h1, h2, h3, .font-display {
   letter-spacing: -0.015em;
 }
 
-/* Thin scrollbars inside panels */
+/* No visible scrollbars anywhere: pages and panels still scroll with the wheel, touch and keyboard. */
+html,
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+html::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
 .scroll-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(148 163 184 / 0.45) transparent;
+  scrollbar-width: none;
 }
 .no-scrollbar {
   scrollbar-width: none;

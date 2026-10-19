@@ -66,13 +66,8 @@ export function ExternalLink({ href, children, className }: { href: string; chil
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative grid h-9 w-9 place-items-center rounded-lg bg-brand-800 text-white">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-        </svg>
-        <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-coral-500 dark:border-ink-900" aria-hidden="true" />
-      </div>
+      {/* Animated cartoon globe; the motion stops for people who prefer reduced motion. */}
+      <img src="/logo-globe.svg" alt="" width={40} height={40} className="h-10 w-10 shrink-0 drop-shadow-sm" />
       {!compact && (
         <div className="leading-tight">
           <div className="font-display text-[17px] font-extrabold tracking-tight text-slate-900 dark:text-white">WorldTour</div>

@@ -143,12 +143,7 @@ export function PrintDocument({ plan, display, onDone }: { plan: Plan; display: 
       <div className="pd">
         <header className="pd-head">
           <div className="pd-brand">
-            <div className="pd-logo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-              </svg>
-            </div>
+            <img className="pd-logo" src="/logo-globe.svg" alt="" />
             <div>
               <div className="pd-name">WorldTour</div>
               <div className="pd-sub">Trip Itinerary · Electronic Travel Plan</div>
@@ -375,8 +370,7 @@ const CSS = `
 .pd b { font-weight: 600; }
 .pd-head { display: flex; justify-content: space-between; align-items: center; background: #10284d; color: #fff; padding: 10pt 12pt; border-bottom: 3pt solid #ee8a1f; }
 .pd-brand { display: flex; align-items: center; gap: 9pt; }
-.pd-logo { width: 26pt; height: 26pt; border-radius: 6pt; background: #fff; color: #10284d; display: grid; place-items: center; }
-.pd-logo svg { width: 18pt; height: 18pt; }
+.pd-logo { width: 30pt; height: 30pt; }
 .pd-name { font-size: 15pt; font-weight: 800; letter-spacing: -0.01em; }
 .pd-sub { font-size: 8.5pt; opacity: 0.8; }
 .pd-ref { text-align: right; font-size: 8.5pt; }

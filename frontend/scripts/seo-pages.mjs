@@ -149,7 +149,7 @@ function page({ title, description, path, body, jsonLd }) {
 <style>${CSS}</style>
 </head>
 <body>
-<header><div class="wrap"><div class="bar"><a class="logo" href="/">🌐 WorldTour</a><a class="cta" style="margin:0;padding:8px 14px" href="/">Plan a trip</a></div></div></header>
+<header><div class="wrap"><div class="bar"><a class="logo" href="/"><img src="/logo-globe.svg" alt="" width="36" height="36" style="vertical-align:middle;margin-right:8px">WorldTour</a><a class="cta" style="margin:0;padding:8px 14px" href="/">Plan a trip</a></div></div></header>
 ${body}
 <footer><div class="wrap">© ${new Date().getFullYear()} WorldTour · Free AI trip planner · <a href="/trip-planner">All destination guides</a> · Prices in the planner are estimates; confirm on booking sites.</div></footer>
 </body>
