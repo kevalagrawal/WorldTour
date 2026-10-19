@@ -6,6 +6,8 @@ const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/
 
 const NETWORK_MESSAGE = "We couldn't reach the planner just now. It's usually a brief network hiccup — please try again."
 const RETRYABLE = new Set([502, 503, 504])
+// The server sends a heartbeat line every 5 s while planning; this much silence means the connection is dead.
+const STALL_MS = 20000
 
 export class ApiError extends Error {
   status: number
@@ -25,7 +27,7 @@ function headers(accessCode: string | null): HeadersInit {
 }
 
 /**
- * fetch with a time limit and automatic retries.
+ * fetch with a time limit (until the response headers arrive) and automatic retries.
  * Retries on network failures (offline, dropped connection, cold start) and on 502/503/504
  * from the hosting edge, with a short back-off. Other HTTP errors are returned as-is.
  */
@@ -75,7 +77,7 @@ export async function sendChat(session: Session | null, message: string, accessC
   const response = await request(
     '/api/chat',
     { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message }) },
-    { retries: 2, timeoutMs: 60000 },
+    { retries: 2, timeoutMs: 30000 },
   )
   if (!response.ok) await fail(response)
   return response.json()
@@ -85,7 +87,7 @@ async function planOnce(session: Session, accessCode: string | null, onEvent: (e
   const response = await request(
     '/api/plan',
     { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session }) },
-    { retries: 2, timeoutMs: 330000 },
+    { retries: 2, timeoutMs: 30000 },
   )
   if (!response.ok || !response.body) await fail(response)
   const reader = response.body!.getReader()
@@ -100,9 +102,13 @@ async function planOnce(session: Session, accessCode: string | null, onEvent: (e
     else if (message.type === 'error') throw new ApiError(message.message, 500)
     // "ping" lines only keep the connection alive.
   }
+  // A dropped connection can leave the read hanging instead of failing, so cancel it after a silent spell.
+  let watchdog = setTimeout(() => void reader.cancel(), STALL_MS)
   try {
     for (;;) {
       const { value, done } = await reader.read()
+      clearTimeout(watchdog)
+      watchdog = setTimeout(() => void reader.cancel(), STALL_MS)
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
@@ -113,6 +119,8 @@ async function planOnce(session: Session, accessCode: string | null, onEvent: (e
   } catch (error) {
     if (error instanceof ApiError) throw error
     throw new ApiError(NETWORK_MESSAGE, 0, true)
+  } finally {
+    clearTimeout(watchdog)
   }
   if (!result) throw new ApiError(NETWORK_MESSAGE, 0, true)
   return result as { plan: Plan; session: Session }
@@ -120,7 +128,7 @@ async function planOnce(session: Session, accessCode: string | null, onEvent: (e
 
 /**
  * Runs the workflow. Progress events arrive one per line (NDJSON) while the plan is built.
- * If the connection drops before the plan arrives, it starts again once automatically.
+ * If the connection drops or stalls before the plan arrives, it starts again (up to twice) automatically.
  */
 export async function runPlan(
   session: Session,
@@ -128,13 +136,14 @@ export async function runPlan(
   onEvent: (event: AgentEvent) => void,
   onRestart?: () => void,
 ): Promise<{ plan: Plan; session: Session }> {
-  try {
-    return await planOnce(session, accessCode, onEvent)
-  } catch (error) {
-    if (!(error instanceof ApiError) || !error.network) throw error
-    onRestart?.()
-    await wait(1000)
-    return planOnce(session, accessCode, onEvent)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await planOnce(session, accessCode, onEvent)
+    } catch (error) {
+      if (!(error instanceof ApiError) || !error.network || attempt >= 2) throw error
+      onRestart?.()
+      await wait(1500 * (attempt + 1))
+    }
   }
 }
 
