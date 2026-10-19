@@ -9,11 +9,13 @@ interface Props {
   size?: 'md' | 'lg'
   autoFocus?: boolean
   hint?: boolean
+  /** Text to start with, e.g. a prompt from a destination guide link. */
+  initialText?: string
 }
 
 /** Auto-growing message box: Enter sends, Shift+Enter adds a line. */
-export function Composer({ onSend, busy = false, placeholder = 'Describe your trip…', size = 'md', autoFocus = false, hint = true }: Props) {
-  const [text, setText] = useState('')
+export function Composer({ onSend, busy = false, placeholder = 'Describe your trip…', size = 'md', autoFocus = false, hint = true, initialText = '' }: Props) {
+  const [text, setText] = useState(initialText)
   const ref = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {

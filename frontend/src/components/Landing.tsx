@@ -1,10 +1,41 @@
 import { ArrowRight, BedDouble, CalendarClock, CheckCircle2, CloudSun, Coins, MessagesSquare, Plane, ShieldCheck, Sparkles, TrainFront, Wand2 } from 'lucide-react'
+import { useState } from 'react'
 import { useWikiImage } from '../lib/images'
 import { useStore } from '../store'
 import { Composer } from './Composer'
 import { Logo } from './ui'
 
 const YEAR = new Date().getFullYear()
+
+/** A prompt passed in the link (?q=...) from a destination guide; the traveler can edit it before sending. */
+function linkedPrompt(): string {
+  try {
+    return new URLSearchParams(window.location.search).get('q')?.slice(0, 500) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+// Shown on the page and mirrored in the FAQPage structured data in index.html; keep both in sync.
+const FAQ = [
+  { q: 'Is WorldTour free to use?', a: "Yes. Planning a trip is free and needs no sign-up. You book flights, trains and hotels directly on the provider's website." },
+  {
+    q: 'How does the AI trip planner work?',
+    a: 'Describe your trip in your own words — where, from where, dates, budget and who is coming. WorldTour asks for anything missing, checks the trip is realistic, then compares flights, trains, buses, cabs and hotels and builds an hour-by-hour itinerary with a full cost breakdown.',
+  },
+  {
+    q: 'Can it plan trips within India by train?',
+    a: 'Yes. For domestic trips you see flights next to trains (Sleeper, 3AC, 2AC), AC buses and private cabs, with travel times and estimated fares, and can switch between them instantly.',
+  },
+  { q: 'Can I download my itinerary as a PDF?', a: "Yes. Download PDF creates a travel document with photos, journey and hotel details, the cost summary and every day's timetable." },
+  { q: 'Which currencies are supported?', a: "Prices are shown in the currency you plan in — Indian rupees (₹), US dollars, euros, pounds and more — converted at today's exchange rate." },
+]
+
+const GUIDES = [
+  ['goa', 'Goa'], ['jaipur', 'Jaipur'], ['kerala', 'Kerala'], ['manali', 'Manali'], ['udaipur', 'Udaipur'], ['varanasi', 'Varanasi'],
+  ['rishikesh', 'Rishikesh'], ['ladakh', 'Leh Ladakh'], ['andaman', 'Andaman'], ['dubai', 'Dubai'], ['bali', 'Bali'], ['bangkok', 'Bangkok'],
+  ['singapore', 'Singapore'], ['paris', 'Paris'],
+] as const
 
 const PROMPTS = [
   '4 days in Goa from Ahmedabad for 2, under ₹60,000',
@@ -46,6 +77,7 @@ export function Landing() {
   const send = useStore((s) => s.send)
   const busy = useStore((s) => s.status !== 'idle')
   const heroPhoto = useWikiImage(['Amer Fort'], 1800)
+  const [initialPrompt] = useState(linkedPrompt)
 
   return (
     <div className="overflow-x-hidden">
@@ -71,7 +103,7 @@ export function Landing() {
             </p>
 
             <div className="mt-8 max-w-xl rounded-2xl bg-white p-3 text-slate-900 shadow-2xl dark:bg-ink-800 dark:text-white">
-              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" />
+              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" initialText={initialPrompt} autoFocus={!!initialPrompt} />
               <div className="mt-3 flex flex-wrap gap-2 px-1 pb-1">
                 {PROMPTS.map((prompt) => (
                   <button
@@ -139,6 +171,24 @@ export function Landing() {
               <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">{f.text}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section id="faq" className="scroll-mt-20 border-t border-slate-200 bg-white py-16 dark:border-white/10 dark:bg-ink-800/50">
+        <div className="mx-auto max-w-3xl px-4 sm:px-6">
+          <SectionHeading eyebrow="FAQ" title="Questions about the AI trip planner" />
+          <div className="mt-8 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-ink-800">
+            {FAQ.map((item) => (
+              <details key={item.q} className="group px-5 py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold text-slate-900 dark:text-white">
+                  <h3 className="text-base">{item.q}</h3>
+                  <span className="text-xl leading-none text-slate-400 transition group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{item.a}</p>
+              </details>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -259,7 +309,7 @@ function ProductPreview() {
 function Footer() {
   return (
     <footer className="border-t border-slate-200/80 bg-white dark:border-white/10 dark:bg-ink-900">
-      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr]">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.2fr_1fr_1.3fr_0.8fr]">
         <div>
           <Logo />
           <p className="mt-3 max-w-sm text-sm text-slate-500 dark:text-slate-400">
@@ -275,11 +325,21 @@ function Footer() {
           </ul>
         </div>
         <div>
+          <div className="text-sm font-semibold text-slate-900 dark:text-white">Trip planners</div>
+          <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm text-slate-500 dark:text-slate-400">
+            {GUIDES.map(([slug, name]) => (
+              <li key={slug}><a href={`/trip-planner/${slug}`} className="hover:text-slate-900 dark:hover:text-white">{name} trip planner</a></li>
+            ))}
+          </ul>
+        </div>
+        <div>
           <div className="text-sm font-semibold text-slate-900 dark:text-white">Explore</div>
           <ul className="mt-3 space-y-1.5 text-sm text-slate-500 dark:text-slate-400">
             <li><a href="#destinations" className="hover:text-slate-900 dark:hover:text-white">Popular trips</a></li>
             <li><a href="#how" className="hover:text-slate-900 dark:hover:text-white">How it works</a></li>
             <li><a href="#features" className="hover:text-slate-900 dark:hover:text-white">Features</a></li>
+            <li><a href="#faq" className="hover:text-slate-900 dark:hover:text-white">FAQ</a></li>
+            <li><a href="/trip-planner" className="hover:text-slate-900 dark:hover:text-white">All destination guides</a></li>
           </ul>
         </div>
       </div>
