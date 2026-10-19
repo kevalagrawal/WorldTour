@@ -291,7 +291,8 @@ def _hotel_for_package(package: str, hotels: list[dict], share: float, nights: i
     affordable = [h for h in verified if cost(h) <= max(share, 0)]
     if not affordable:
         return cheapest
-    top = max(affordable, key=lambda h: (h.get("rating") or 0, _money(h, "price_per_night")))
+    # Premium means a better class of hotel first (stars or tier), then guest rating — a 4.8-rated hostel is not premium.
+    top = max(affordable, key=lambda h: (_class(h), h.get("rating") or 0, _money(h, "price_per_night")))
     if package == "premium":
         return top
     # Balanced sits between the two: the best-rated hotel priced above the cheapest and below the top pick.
@@ -301,6 +302,14 @@ def _hotel_for_package(package: str, hotels: list[dict], share: float, nights: i
         return max(middle, key=lambda h: (h.get("rating") or 0, -_money(h, "price_per_night")))
     by_price = sorted((h for h in affordable if _money(h, "price_per_night") <= top_price), key=lambda h: _money(h, "price_per_night"))
     return by_price[len(by_price) // 2] if by_price else cheapest
+
+
+def _class(hotel: dict) -> int:
+    """Hotel class 1-5 from stars, else from the tier label."""
+    stars = hotel.get("stars")
+    if isinstance(stars, (int, float)) and stars > 0:
+        return int(stars)
+    return {"budget": 2, "mid": 3, "comfort": 4, "luxury": 5}.get(hotel.get("tier") or "", 3)
 
 
 def _hotel_brief(hotel: dict) -> dict:
