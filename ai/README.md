@@ -171,7 +171,7 @@ The same planner runs as a web API (`src/worldtour_ai/web/app.py`, FastAPI) used
 python scripts/serve.py      # http://127.0.0.1:8000  (GET /api/health, POST /api/chat, /api/plan, /api/export/text|ics)
 ```
 
-On Vercel, `api/index.py` is the entry point and `vercel.json` routes `/api/*` to it with a 300-second limit.
+On Vercel, the root `app.py` is the entry point (Vercel detects the FastAPI `app` and routes every path to it); `vercel.json` sets a 300-second limit.
 Optional protection variables: `ACCESS_CODE`, `ALLOWED_ORIGINS`, `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` (+ `PLANS_PER_DAY`).
 
 ## Running the terminal application

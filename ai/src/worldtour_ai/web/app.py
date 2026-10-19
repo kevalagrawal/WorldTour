@@ -90,6 +90,18 @@ def _over_daily_limit(request: Request) -> bool:
     return count > int(os.environ.get("PLANS_PER_DAY", "10"))
 
 
+@app.get("/")
+def root() -> dict:
+    """Friendly landing response so the bare API address shows it is alive."""
+    return {
+        "name": "WorldTour API",
+        "status": "ok",
+        "health": "/api/health",
+        "docs": "/docs",
+        "endpoints": ["POST /api/chat", "POST /api/plan", "POST /api/export/text", "POST /api/export/ics"],
+    }
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "access_code_required": bool(os.environ.get("ACCESS_CODE"))}
