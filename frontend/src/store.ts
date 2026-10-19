@@ -1,7 +1,10 @@
+import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, runPlan, sendChat } from './lib/api'
-import type { AgentEvent, ChatMessage, Plan, Session, Summary } from './lib/types'
+import { formatMoney } from './lib/money'
+import { applySelection, initialSelection, packageSelection, type Selection, type TransportPick } from './lib/selection'
+import type { AgentEvent, ChatMessage, Package, Plan, Session, Summary } from './lib/types'
 
 type Status = 'idle' | 'thinking' | 'planning'
 
@@ -10,6 +13,8 @@ interface State {
   session: Session | null
   summary: Summary | null
   plan: Plan | null
+  /** The traveler's own picks on top of the plan; null means the planner's recommendation. */
+  selection: Selection | null
   events: AgentEvent[]
   status: Status
   notice: string | null
@@ -23,7 +28,30 @@ interface State {
   setAccessCode: (code: string) => void
   setNeedsAccessCode: (value: boolean) => void
   dismissError: () => void
+  choosePackage: (name: Package['name'], announce?: boolean) => void
+  chooseTransport: (pick: TransportPick) => void
+  chooseHotel: (city: string, id: string) => void
+  resetSelection: () => void
 }
+
+/** "by train", "go by flight" … switched in the browser when the plan already has that option. */
+const MODE_REQUEST = /^(?:please\s+)?(?:(?:i\s+want\s+to\s+)?(?:go|travel)\s+)?(?:switch\s+to\s+|change\s+to\s+)?(?:by|via|take\s+(?:a|the))\s+(train|rail|flight|plane|air|bus|cab)[.!]?$/i
+
+function pickForMode(plan: Plan, mode: string): TransportPick | null {
+  if (mode === 'flight') {
+    const outbound = plan.recommended_outbound_id ?? plan.selected_flights.find((f) => f.price != null)?.option_id
+    if (!outbound || !plan.selected_flights.length) return null
+    return { kind: 'flight', outbound, ret: plan.recommended_return_id ?? plan.return_flights[0]?.option_id ?? null }
+  }
+  const options = plan.ground_options.filter((o) => o.kind === mode).sort((a, b) => a.price_pp - b.price_pp)
+  if (!options.length) return null
+  // A mid-priced train (e.g. 3AC rather than Sleeper) is the usual comfortable default.
+  const option = mode === 'train' ? options[Math.floor((options.length - 1) / 2)] : options[0]
+  return { kind: 'ground', id: option.option_id }
+}
+
+/** "premium", "switch to budget", "the balanced package" … handled in the browser, without re-planning. */
+const PACKAGE_REQUEST = /^(?:please\s+)?(?:switch\s+to\s+|change\s+to\s+|go\s+with\s+|use\s+|make\s+it\s+)?(?:the\s+)?(budget|balanced|premium|luxury|cheaper|cheapest)(?:\s+(?:package|option|plan|one))?[.!]?$/i
 
 const now = () => new Date().toISOString()
 
@@ -47,6 +75,7 @@ export const useStore = create<State>()(
         )
         set((s) => ({
           plan: result.plan,
+          selection: null,
           session: result.session,
           status: 'idle',
           notice: null,
@@ -73,6 +102,7 @@ export const useStore = create<State>()(
         session: null,
         summary: null,
         plan: null,
+        selection: null,
         events: [],
         status: 'idle',
         notice: null,
@@ -83,6 +113,35 @@ export const useStore = create<State>()(
         send: async (text: string) => {
           const message = text.trim()
           if (!message || get().status !== 'idle') return
+          const mode = message.match(MODE_REQUEST)?.[1]?.toLowerCase()
+          const current = get().plan
+          if (mode && current && get().session?.stage === 'planned') {
+            const pick = pickForMode(current, mode === 'plane' || mode === 'air' ? 'flight' : mode === 'rail' ? 'train' : mode)
+            if (pick) {
+              set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }], error: null }))
+              get().chooseTransport(pick)
+              const updated = applySelection(current, get().selection)
+              const display = { currency: current.display_currency || 'USD', rate: current.usd_to_display || 1 }
+              set((s) => ({
+                messages: [
+                  ...s.messages,
+                  {
+                    role: 'assistant',
+                    at: now(),
+                    content: `Done — you'll travel by ${updated.transport_choice?.label ?? mode}. I've updated the arrival and departure days and the costs; the rest of the itinerary is unchanged. New total: ${formatMoney(updated.estimated_cost, display)}.`,
+                  },
+                ],
+              }))
+              return
+            }
+          }
+          const asked = message.match(PACKAGE_REQUEST)?.[1]?.toLowerCase()
+          if (asked && get().plan && get().session?.stage === 'planned') {
+            set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }], error: null }))
+            const name = asked === 'luxury' ? 'premium' : asked.startsWith('cheap') ? 'budget' : (asked as Package['name'])
+            get().choosePackage(name, true)
+            return
+          }
           set((s) => ({
             // A message that failed earlier is replaced by this attempt rather than shown twice.
             messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }],
@@ -127,10 +186,46 @@ export const useStore = create<State>()(
         },
 
         reset: () =>
-          set({ messages: [WELCOME], session: null, summary: null, plan: null, events: [], status: 'idle', error: null, notice: null }),
+          set({ messages: [WELCOME], session: null, summary: null, plan: null, selection: null, events: [], status: 'idle', error: null, notice: null }),
         setAccessCode: (code) => set({ accessCode: code.trim() || null, needsAccessCode: false, error: null }),
         setNeedsAccessCode: (value) => set({ needsAccessCode: value }),
         dismissError: () => set({ error: null }),
+
+        choosePackage: (name, announce = false) => {
+          const { plan, session } = get()
+          const pkg = plan?.packages.find((p) => p.name === name)
+          if (!plan || !pkg) return
+          const selection = packageSelection(plan, pkg)
+          const updated = applySelection(plan, selection)
+          set((s) => ({
+            selection,
+            // Remember the choice, so a later change in the chat ("5 days") re-plans with this package.
+            session: session ? { ...session, request: { ...((session.request as object) ?? {}), package_choice: name } } : session,
+            messages: announce
+              ? [
+                  ...s.messages,
+                  {
+                    role: 'assistant',
+                    at: now(),
+                    content: `Switched to the ${pkg.label} package — ${updated.transport_choice?.label ?? 'travel'} and ${pkg.hotels.map((h) => h.name).join(', ') || 'the hotel'}. Your day-by-day plan stays the same; the new total is ${formatMoney(updated.estimated_cost, { currency: plan.display_currency || 'USD', rate: plan.usd_to_display || 1 })}.`,
+                  },
+                ]
+              : s.messages,
+          }))
+        },
+        chooseTransport: (pick) => {
+          const { plan } = get()
+          if (!plan) return
+          const current = get().selection ?? initialSelection(plan)
+          set({ selection: { ...current, transport: pick, package: current.package } })
+        },
+        chooseHotel: (city, id) => {
+          const { plan } = get()
+          if (!plan) return
+          const current = get().selection ?? initialSelection(plan)
+          set({ selection: { ...current, hotels: { ...current.hotels, [city]: id } } })
+        },
+        resetSelection: () => set({ selection: null }),
       }
     },
     {
@@ -138,10 +233,17 @@ export const useStore = create<State>()(
       version: 2,
       migrate: (state) => state as State,
       // Keep the conversation and plan across reloads, but never resume mid-request.
-      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, accessCode: s.accessCode }),
+      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, selection: s.selection, accessCode: s.accessCode }),
     },
   ),
 )
 
 /** True once the traveler has said something (the landing page gives way to the workspace). */
 export const useStarted = () => useStore((s) => s.messages.some((m) => m.role === 'user') || !!s.plan)
+
+/** The plan with the traveler's picks applied — what every plan view shows and exports. */
+export function useActivePlan(): Plan | null {
+  const plan = useStore((s) => s.plan)
+  const selection = useStore((s) => s.selection)
+  return useMemo(() => (plan ? applySelection(plan, selection) : null), [plan, selection])
+}

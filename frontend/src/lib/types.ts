@@ -72,6 +72,8 @@ export interface GroundOption {
   duration_minutes: number
   distance_km: number
   price_pp: number
+  /** Everyone, one way (a cab is priced per vehicle, so this is not always price_pp × travelers). */
+  price_total_one_way?: number
   overnight?: boolean
   booking_link?: string
 }
@@ -80,6 +82,9 @@ export interface TransportChoice {
   kind: string
   label: string
   option_id?: string
+  outbound_id?: string | null
+  return_id?: string | null
+  duration_minutes?: number | null
   round_trip_total: number
   door_to_door_minutes: number
   price_is_estimate?: boolean
@@ -93,6 +98,7 @@ export interface PackageHotel {
   price_per_night: number | null
   rating: number | null
   nights: number
+  rooms?: number
 }
 
 export interface Package {
@@ -123,6 +129,10 @@ export interface Hotel {
   verified_on_map?: boolean
   data_source?: string
   link?: string | null
+  lat?: number | null
+  lon?: number | null
+  distance_to_center_km?: number | null
+  location?: string | null
 }
 
 export interface WeatherDay {
@@ -158,9 +168,11 @@ export interface ItineraryDay {
   midday: string
   evening: string
   stay_name: string
-  stay: { name: string; lat?: number | null; lon?: number | null } | null
+  stay: { name: string; option_id?: string | null; lat?: number | null; lon?: number | null } | null
   activities: Activity[]
   local_transport_usd?: number
+  /** Set in the browser when a different way there or back changes what fits in the day. */
+  notes?: string[]
 }
 
 export interface BreakdownRow {
@@ -168,6 +180,17 @@ export interface BreakdownRow {
   cost: number
   detail?: string
   legs?: { from: string; to: string; distance_km: number; mode: string; cost: number }[]
+}
+
+export interface Pricing {
+  travelers: number
+  rooms: number
+  nights: number | null
+  intercity_cost: number
+  country: string | null
+  local_rates: { name: string; base: number; per_km: number }
+  airport_km: number
+  station_km: number
 }
 
 export interface Plan {
@@ -212,5 +235,7 @@ export interface Plan {
   cities: string[]
   cities_are_suggestions: boolean
   algorithms_actually_used: string[]
+  attractions?: { name: string; category?: string; city?: string | null }[]
+  pricing?: Pricing
   routes: { dijkstra: { path: string[]; total_cost_km: number } | null }
 }

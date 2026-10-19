@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { BedDouble, Bus, Car, Footprints, Landmark, MapPin, Moon, Plane, Sun, Sunrise, TrainFront, Utensils } from 'lucide-react'
+import { BedDouble, Bus, Car, Coffee, Footprints, Info, Landmark, MapPin, Moon, Plane, Sun, Sunrise, TrainFront, Utensils } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { fillMoney, formatMoney, hhmm, prettyDate, type Display } from '../../lib/money'
 import type { Activity, Plan } from '../../lib/types'
@@ -23,7 +23,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
             onClick={() => setSelected(index)}
             className={clsx(
               'shrink-0 rounded-xl border px-3 py-2 text-left transition',
-              index === selected ? 'border-brand-500 bg-brand-600 text-white' : 'border-slate-200 bg-white hover:border-brand-300 dark:border-white/10 dark:bg-ink-800',
+              index === selected ? 'border-brand-700 bg-brand-700 text-white dark:border-brand-500 dark:bg-brand-500' : 'border-slate-200 bg-white hover:border-brand-300 dark:border-white/10 dark:bg-ink-800',
             )}
           >
             <div className="text-xs font-semibold opacity-80">Day {d.day}</div>
@@ -49,6 +49,11 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
           )}
         </div>
 
+        {day.notes?.map((note) => (
+          <div key={note} className="flex gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">
+            <Info size={15} className="mt-0.5 shrink-0" /> {note}
+          </div>
+        ))}
         <div className="grid gap-0 lg:grid-cols-5">
           <div className="space-y-4 p-4 lg:col-span-3">
             <div className="space-y-2">
@@ -83,7 +88,7 @@ export function DayByDay({ plan, display }: { plan: Plan; display: Display }) {
 function Part({ icon, label, text }: { icon: ReactNode; label: string; text: string }) {
   return (
     <div className="flex gap-3 rounded-xl bg-slate-50 p-3 dark:bg-white/5">
-      <span className="mt-0.5 text-amber-500">{icon}</span>
+      <span className="mt-0.5 text-coral-500">{icon}</span>
       <div>
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
         <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{text}</p>
@@ -100,7 +105,7 @@ function TimelineItem({ activity, display }: { activity: Activity; display: Disp
       <span
         className={clsx(
           'absolute -left-[27px] top-2 grid h-5 w-5 place-items-center rounded-full ring-4 ring-white dark:ring-ink-800',
-          transfer ? 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300' : 'bg-brand-600 text-white',
+          transfer ? 'bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300' : activity.category === 'free' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-brand-700 text-white dark:bg-brand-500',
         )}
       >
         {icon}
@@ -125,6 +130,7 @@ function iconFor(activity: Activity): ReactNode {
   }
   if (activity.category === 'meal' || activity.category === 'food') return <Utensils size={size} />
   if (activity.category === 'stay') return <BedDouble size={size} />
+  if (activity.category === 'free') return <Coffee size={size} />
   if (activity.category === 'travel') return <Plane size={size} />
   return <Landmark size={size} />
 }

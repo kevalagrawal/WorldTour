@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import date, timedelta
 from urllib.parse import quote, urlencode
 
+from worldtour_ai.data.places import lookup_place
 from worldtour_ai.services.scoring_service import DEFAULT_WEIGHTS, optimization_sentence
+from worldtour_ai.services.transport import AIRPORT_KM, STATION_KM, local_rates
 from worldtour_ai.utils.events import REPLAN_TRIGGERED
 
 _ORDER = [
@@ -152,6 +154,8 @@ def build_final_plan(state: dict) -> dict:
             "astar_cost_km": (route.get("a_star") or {}).get("total_cost_km") if isinstance(route.get("a_star"), dict) else None,
         },
         "parser_notes": request.get("parser_notes") or [],
+        # What the browser needs to re-cost the trip when the traveler picks another flight, train or hotel.
+        "pricing": _pricing(request, budget),
         "cities_are_suggestions": request.get("cities_are_suggestions", False),
         "data_notes": _data_notes(flight, hotel, transport_result),
     }
@@ -286,3 +290,18 @@ def _clean_warnings(warnings: list[str]) -> list[str]:
         seen.add(warning)
         cleaned.append(warning)
     return cleaned
+
+
+def _pricing(request: dict, budget: dict) -> dict:
+    place = lookup_place((request.get("cities") or [None])[0]) or lookup_place(request.get("destination"))
+    country = place.country if place else None
+    return {
+        "travelers": budget.get("travelers_used") or int(request.get("travelers") or 1),
+        "rooms": budget.get("rooms_used") or 1,
+        "nights": budget.get("nights_used"),
+        "intercity_cost": round(float(budget.get("intercity_cost") or 0), 2),
+        "country": country,
+        "local_rates": local_rates(country),
+        "airport_km": AIRPORT_KM,
+        "station_km": STATION_KM,
+    }

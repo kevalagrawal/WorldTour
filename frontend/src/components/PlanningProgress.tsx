@@ -11,7 +11,7 @@ export function PlanningProgress() {
   return (
     <div className="mx-auto max-w-2xl animate-fade-up py-4 lg:py-10">
       <div className="mb-7 text-center">
-        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-lift">
+        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-xl bg-brand-800 text-white shadow-lift dark:bg-brand-500">
           <Compass className="animate-spin [animation-duration:3s]" size={26} />
         </div>
         <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Building your trip</h2>
@@ -25,7 +25,7 @@ export function PlanningProgress() {
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-brand-500 to-coral-500 transition-all duration-700"
+              className="h-full rounded-full bg-brand-700 dark:bg-brand-400 transition-all duration-700"
               style={{ width: `${Math.max(5, (finished / Math.max(total, 1)) * 100)}%` }}
             />
           </div>

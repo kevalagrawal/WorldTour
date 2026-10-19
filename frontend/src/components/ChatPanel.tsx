@@ -1,18 +1,14 @@
 import clsx from 'clsx'
 import { AlertTriangle, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
-import { useStore } from '../store'
+import { useActivePlan, useStore } from '../store'
 import { Composer } from './Composer'
 import { MessageContent } from './MessageContent'
 import { useProgress } from '../lib/progress'
 
-const AFTER_PLAN = [
-  { label: 'Premium', send: 'premium' },
-  { label: 'Budget', send: 'budget' },
-  { label: 'By train', send: 'by train' },
+const MORE = [
   { label: 'More relaxed', send: 'more relaxed' },
   { label: 'More activities', send: 'more activities' },
-  { label: 'Add beaches', send: 'add beaches' },
 ]
 const FEASIBILITY = [
   { label: 'Yes, apply suggestions', send: 'yes' },
@@ -41,7 +37,7 @@ function useOnline() {
 
 function AssistantAvatar({ small = false }: { small?: boolean }) {
   return (
-    <div className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm', small ? 'h-7 w-7' : 'h-9 w-9')}>
+    <div className={clsx('grid shrink-0 place-items-center rounded-full bg-brand-800 text-white shadow-sm dark:bg-brand-500', small ? 'h-7 w-7' : 'h-9 w-9')}>
       <Sparkles size={small ? 13 : 16} />
     </div>
   )
@@ -58,7 +54,17 @@ export function ChatPanel() {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages.length, status, error])
 
-  const quick = busy ? [] : session?.stage === 'feasibility' ? FEASIBILITY : plan && session?.stage === 'planned' ? AFTER_PLAN : []
+  const active = useActivePlan()
+  // Package and travel-mode chips switch instantly in the browser; the others ask the planner.
+  const afterPlan = active
+    ? [
+        ...active.packages.filter((p) => p.name !== active.recommended_package).map((p) => ({ label: p.label, send: p.name })),
+        ...(active.transport_choice?.kind !== 'flight' && active.selected_flights.some((f) => f.price != null) ? [{ label: 'By flight', send: 'by flight' }] : []),
+        ...(active.transport_choice?.kind !== 'train' && active.ground_options.some((o) => o.kind === 'train') ? [{ label: 'By train', send: 'by train' }] : []),
+        ...MORE,
+      ]
+    : []
+  const quick = busy ? [] : session?.stage === 'feasibility' ? FEASIBILITY : plan && session?.stage === 'planned' ? afterPlan : []
   const daysChip = plan?.duration.days && session?.stage === 'planned' && !busy ? [{ label: `${plan.duration.days + 1} days`, send: `${plan.duration.days + 1} days` }] : []
   const progress = useProgress()
 
@@ -92,7 +98,7 @@ export function ChatPanel() {
               <div key={index} className="flex animate-fade-up flex-col items-end">
                 <div
                   className={clsx(
-                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm',
+                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-brand-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm',
                     message.failed && 'opacity-60',
                   )}
                 >
@@ -178,7 +184,7 @@ export function ChatPanel() {
             <button
               key={chip.label}
               onClick={() => void send(chip.send)}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
               {chip.label}
             </button>

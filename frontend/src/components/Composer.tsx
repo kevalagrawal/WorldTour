@@ -67,7 +67,7 @@ export function Composer({ onSend, busy = false, placeholder = 'Describe your tr
           disabled={busy || !text.trim()}
           aria-label="Send message"
           className={clsx(
-            'grid shrink-0 place-items-center rounded-xl bg-brand-600 text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-white/10 dark:disabled:text-slate-500',
+            'grid shrink-0 place-items-center rounded-lg bg-brand-700 text-white shadow-sm transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-white/10 dark:disabled:text-slate-500',
             size === 'lg' ? 'h-12 w-12' : 'h-10 w-10',
           )}
         >

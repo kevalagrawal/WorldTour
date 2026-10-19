@@ -1,11 +1,11 @@
-import { CalendarPlus, Download, ExternalLink as LinkIcon, Info, MapPinned, Plane, TrainFront } from 'lucide-react'
+import { CalendarPlus, Download, ExternalLink as LinkIcon, FileDown, Info, MapPinned, Plane, TrainFront } from 'lucide-react'
 import { useState } from 'react'
 import { downloadExport } from '../../lib/api'
 import type { Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
 import { Card, ExternalLink, SectionTitle } from '../ui'
 
-export function BookExport({ plan }: { plan: Plan; display: Display }) {
+export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPdf: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const links = plan.links || {}
@@ -55,7 +55,10 @@ export function BookExport({ plan }: { plan: Plan; display: Display }) {
       <Card className="p-4">
         <SectionTitle icon={<Download size={18} />} title="Take it with you" />
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => void download('text')} disabled={!!busy} className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
+          <button onClick={onPdf} className="inline-flex items-center gap-2 rounded-lg bg-coral-500 px-4 py-2 text-sm font-semibold text-white hover:bg-coral-600">
+            <FileDown size={15} /> Download PDF itinerary
+          </button>
+          <button onClick={() => void download('text')} disabled={!!busy} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5">
             <Download size={15} /> {busy === 'text' ? 'Preparing…' : 'Download plan (.txt)'}
           </button>
           <button
@@ -66,10 +69,8 @@ export function BookExport({ plan }: { plan: Plan; display: Display }) {
           >
             <CalendarPlus size={15} /> {busy === 'ics' ? 'Preparing…' : 'Add to calendar (.ics)'}
           </button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5">
-            Print
-          </button>
         </div>
+        <p className="mt-2 text-xs text-slate-500">The PDF is an e-ticket style travel document with photos, journey and hotel details, costs and every day's timetable. In the print window, choose “Save as PDF”.</p>
         {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
         {!plan.dates.start_date && <p className="mt-2 text-xs text-slate-500">Tell me your travel dates in the chat to unlock the calendar file.</p>}
       </Card>

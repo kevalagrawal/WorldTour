@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={clsx('rounded-2xl border border-slate-200/80 bg-white shadow-soft dark:border-white/10 dark:bg-ink-800', className)}>
+    <div className={clsx('rounded-xl border border-slate-200 bg-white shadow-soft dark:border-white/10 dark:bg-ink-800', className)}>
       {children}
     </div>
   )
@@ -14,7 +15,7 @@ export function SectionTitle({ icon, title, subtitle, action }: { icon?: ReactNo
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-start gap-3">
         {icon && (
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-300">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200">
             {icon}
           </span>
         )}
@@ -43,7 +44,7 @@ export function Badge({ children, tone = 'slate' }: { children: ReactNode; tone?
 
 export function Stat({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-soft dark:border-white/10 dark:bg-ink-800">
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft dark:border-white/10 dark:bg-ink-800">
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
         {icon}
         {label}
@@ -65,12 +66,12 @@ export function ExternalLink({ href, children, className }: { href: string; chil
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 via-brand-600 to-brand-800 text-white shadow-lift">
+      <div className="relative grid h-9 w-9 place-items-center rounded-lg bg-brand-800 text-white">
         <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="M3.6 9h16.8M3.6 15h16.8M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
         </svg>
-        <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-coral-500 dark:border-ink-900" />
+        <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-white bg-coral-500 dark:border-ink-900" aria-hidden="true" />
       </div>
       {!compact && (
         <div className="leading-tight">
@@ -79,5 +80,92 @@ export function Logo({ compact = false }: { compact?: boolean }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** A modal confirmation in the site's own style (instead of the browser's confirm box). */
+export function ConfirmDialog({
+  open,
+  title,
+  body,
+  confirmLabel,
+  cancelLabel = 'Cancel',
+  tone = 'brand',
+  icon,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean
+  title: string
+  body: ReactNode
+  confirmLabel: string
+  cancelLabel?: string
+  tone?: 'brand' | 'danger'
+  icon?: ReactNode
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const confirmRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const previous = document.activeElement as HTMLElement | null
+    confirmRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onCancel()
+    document.addEventListener('keydown', onKey)
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = overflow
+      previous?.focus?.()
+    }
+  }, [open, onCancel])
+  if (!open) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[3000] flex items-end justify-center p-4 sm:items-center" role="presentation">
+      <div className="absolute inset-0 animate-[fade-in_0.15s_ease-out] bg-slate-950/50 backdrop-blur-[2px]" onClick={onCancel} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        className="relative w-full max-w-md animate-fade-up overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-ink-800"
+      >
+        <div className="flex gap-4 p-5 sm:p-6">
+          {icon && (
+            <span
+              className={clsx(
+                'grid h-11 w-11 shrink-0 place-items-center rounded-full',
+                tone === 'danger' ? 'bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300' : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200',
+              )}
+            >
+              {icon}
+            </span>
+          )}
+          <div className="min-w-0">
+            <h2 id="confirm-title" className="text-lg font-bold text-slate-900 dark:text-white">{title}</h2>
+            <div className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-300">{body}</div>
+          </div>
+        </div>
+        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 bg-slate-50 px-5 py-3.5 sm:flex-row sm:justify-end sm:px-6 dark:border-white/10 dark:bg-white/[0.03]">
+          <button
+            onClick={onCancel}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-white/15 dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/5"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            ref={confirmRef}
+            onClick={onConfirm}
+            className={clsx(
+              'h-10 rounded-lg px-4 text-sm font-semibold text-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-ink-800',
+              tone === 'danger' ? 'bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500' : 'bg-brand-700 hover:bg-brand-800 focus-visible:ring-brand-500',
+            )}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }

@@ -8,7 +8,7 @@ import { Landing } from './components/Landing'
 import { PlanningProgress } from './components/PlanningProgress'
 import { TripBrief } from './components/TripBrief'
 import { health } from './lib/api'
-import { useStarted, useStore } from './store'
+import { useActivePlan, useStarted, useStore } from './store'
 
 // The plan view carries the map and chart libraries; load it only once there is a plan.
 const PlanView = lazy(() => import('./components/plan/PlanView').then((m) => ({ default: m.PlanView })))
@@ -35,6 +35,7 @@ export default function App() {
 
 function Workspace() {
   const { plan, status } = useStore()
+  const active = useActivePlan()
   const planning = status === 'planning'
   const [mobileView, setMobileView] = useState<'chat' | 'trip'>('chat')
 
@@ -65,9 +66,9 @@ function Workspace() {
         >
           {planning ? (
             <PlanningProgress />
-          ) : plan ? (
+          ) : active ? (
             <Suspense fallback={<div className="py-24 text-center text-sm text-slate-500">Loading your plan…</div>}>
-              <PlanView plan={plan} />
+              <PlanView plan={active} />
             </Suspense>
           ) : (
             <TripBrief />
@@ -88,10 +89,10 @@ function Workspace() {
             onClick={() => setMobileView(item.id)}
             className={clsx(
               'relative flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition',
-              mobileView === item.id ? 'text-brand-600 dark:text-brand-300' : 'text-slate-500',
+              mobileView === item.id ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500',
             )}
           >
-            {mobileView === item.id && <span className="absolute top-0 h-0.5 w-10 rounded-full bg-brand-600 dark:bg-brand-300" />}
+            {mobileView === item.id && <span className="absolute top-0 h-0.5 w-10 rounded-full bg-brand-700 dark:bg-brand-300" />}
             {item.icon}
             {item.label}
             {item.id === 'trip' && plan && mobileView === 'chat' && <span className="absolute right-[38%] top-2.5 h-2 w-2 rounded-full bg-coral-500" />}

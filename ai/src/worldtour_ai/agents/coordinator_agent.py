@@ -6,6 +6,9 @@ from worldtour_ai.agents.base_agent import BaseAgent
 from worldtour_ai.algorithms.graphs.geo import haversine_km
 from worldtour_ai.data.places import lookup_place
 
+# Closer than this within one country, a flight is never quicker than road or rail.
+DOMESTIC_FLIGHT_MIN_KM = 150
+
 
 class CoordinatorAgent(BaseAgent):
     agent_id = "COORDINATOR_AGENT"
@@ -42,11 +45,12 @@ class CoordinatorAgent(BaseAgent):
         if origin.name == destination.name:
             return "Flights were not searched because origin and destination are the same place."
         prefs = set(request.get("transport_preferences") or [])
-        if prefs and not prefs & {"flight"} and prefs & {"road", "train", "bus", "cab"} and self.ground_wanted(request):
+        domestic = origin.country == destination.country
+        if not domestic and prefs and not prefs & {"flight"} and prefs & {"road", "train", "bus", "cab"} and self.ground_wanted(request):
             return "Flights were not searched because you asked to travel by " + "/".join(sorted(prefs)) + "."
-        if origin.lat is not None and destination.lat is not None and origin.country == destination.country:
+        if origin.lat is not None and destination.lat is not None and domestic:
             distance = haversine_km(origin.lat, origin.lon, destination.lat, destination.lon)
-            if distance <= 300:
+            if distance <= DOMESTIC_FLIGHT_MIN_KM:
                 return f"Flights were not searched because {origin.name} to {destination.name} is about {distance:.0f} km. Road or rail is more practical."
         return None
 
@@ -56,7 +60,10 @@ class CoordinatorAgent(BaseAgent):
         destination = lookup_place(request.get("destination")) or lookup_place((request.get("cities") or [None])[0])
         prefs = set(request.get("transport_preferences") or [])
         ground = self.ground_wanted(request)
-        ground_only = bool(prefs) and "flight" not in prefs and bool(prefs & {"road", "train", "bus", "cab"}) and ground
+        domestic = bool(origin and destination and origin.country == destination.country)
+        # Within one country the traveler always sees flights next to trains and buses, even after asking for a
+        # train: the preference picks the default option, and they can still compare and switch.
+        ground_only = bool(prefs) and "flight" not in prefs and bool(prefs & {"road", "train", "bus", "cab"}) and ground and not domestic
         days = request.get("duration_days") or 0
         distance = None
         if origin and destination and origin.lat is not None and destination.lat is not None:
@@ -66,7 +73,7 @@ class CoordinatorAgent(BaseAgent):
             and destination
             and origin.name != destination.name
             and not ground_only
-            and (distance is None or distance > 300 or origin.country != destination.country or "flight" in prefs)
+            and (distance is None or distance > DOMESTIC_FLIGHT_MIN_KM or not domestic or "flight" in prefs)
         )
         if needs_flight:
             agents.append("FLIGHT_AGENT")

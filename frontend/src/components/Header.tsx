@@ -1,9 +1,9 @@
 import clsx from 'clsx'
-import { Moon, Plus, Sun } from 'lucide-react'
-import { useState } from 'react'
+import { Moon, Plus, RotateCcw, Sun } from 'lucide-react'
+import { useCallback, useState } from 'react'
 import { prettyDate } from '../lib/money'
 import { useStarted, useStore } from '../store'
-import { Logo } from './ui'
+import { ConfirmDialog, Logo } from './ui'
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -32,6 +32,9 @@ export function Header() {
   const started = useStarted()
   const { reset, status, summary, plan } = useStore()
   const busy = status !== 'idle'
+  const [confirming, setConfirming] = useState(false)
+  const closeConfirm = useCallback(() => setConfirming(false), [])
+  const askNewTrip = () => started && !busy && setConfirming(true)
   const trip = plan
     ? `${plan.destination ?? 'Your trip'}${plan.duration.days ? ` · ${plan.duration.days} days` : ''}`
     : summary?.destination
@@ -43,12 +46,12 @@ export function Header() {
       className={clsx(
         'sticky top-0 z-[1000] border-b backdrop-blur-xl',
         started
-          ? 'border-slate-200/80 bg-white/85 dark:border-white/10 dark:bg-ink-900/85'
-          : 'border-transparent bg-white/60 dark:bg-ink-900/60',
+          ? 'border-slate-200 bg-white/95 dark:border-white/10 dark:bg-ink-900/95'
+          : 'border-slate-200/70 bg-white/90 dark:border-white/10 dark:bg-ink-900/90',
       )}
     >
       <div className={clsx('mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6', started ? 'max-w-[1600px]' : 'max-w-7xl')}>
-        <button onClick={() => started && !busy && window.confirm('Start a new trip? Your current conversation and plan will be cleared.') && reset()} className="shrink-0">
+        <button onClick={askNewTrip} className="shrink-0" aria-label={started ? 'WorldTour — start a new trip' : 'WorldTour'}>
           <Logo />
         </button>
 
@@ -72,9 +75,9 @@ export function Header() {
         <div className="flex shrink-0 items-center gap-1.5">
           {started && (
             <button
-              onClick={() => window.confirm('Start a new trip? Your current conversation and plan will be cleared.') && reset()}
+              onClick={askNewTrip}
               disabled={busy}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-40 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-white/5"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-700 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800 disabled:opacity-40 dark:bg-brand-500 dark:hover:bg-brand-400"
             >
               <Plus size={16} /> <span className="hidden sm:inline">New trip</span>
             </button>
@@ -83,13 +86,36 @@ export function Header() {
           {!started && (
             <a
               href="#plan"
-              className="ml-1 hidden h-9 items-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-700 sm:inline-flex dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+              className="ml-1 hidden h-9 items-center rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white transition hover:bg-brand-800 sm:inline-flex dark:bg-brand-500 dark:hover:bg-brand-400"
             >
               Start planning
             </a>
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirming}
+        icon={<RotateCcw size={20} />}
+        title="Start a new trip?"
+        body={
+          <>
+            {plan ? (
+              <>Your plan for <span className="font-semibold text-slate-800 dark:text-white">{plan.destination ?? 'this trip'}</span> and the conversation will be cleared.</>
+            ) : (
+              'The conversation so far will be cleared.'
+            )}{' '}
+            Tip: download the PDF first if you want to keep it.
+          </>
+        }
+        confirmLabel="Start new trip"
+        cancelLabel="Keep this trip"
+        onCancel={closeConfirm}
+        onConfirm={() => {
+          setConfirming(false)
+          reset()
+          window.scrollTo({ top: 0 })
+        }}
+      />
     </header>
   )
 }

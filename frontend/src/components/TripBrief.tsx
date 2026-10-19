@@ -43,7 +43,7 @@ export function TripBrief() {
   return (
     <div className="mx-auto w-full max-w-3xl animate-fade-up py-2 lg:py-8">
       <div className="mb-6">
-        <div className="text-xs font-bold uppercase tracking-[0.18em] text-coral-500">Trip brief</div>
+        <div className="text-xs font-bold uppercase tracking-[0.18em] text-coral-600 dark:text-coral-400">Trip brief</div>
         <h1 className="mt-1 text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">
           {destination ? `Your trip to ${s?.destination}` : 'Tell me about your trip'}
         </h1>
@@ -60,7 +60,7 @@ export function TripBrief() {
           <span className="text-xs font-semibold text-slate-500">{filled} of {required.length}</span>
         </div>
         <div className="h-1 bg-slate-100 dark:bg-white/5">
-          <div className="h-full bg-gradient-to-r from-brand-500 to-coral-500 transition-all duration-500" style={{ width: `${(filled / required.length) * 100}%` }} />
+          <div className="h-full bg-brand-700 dark:bg-brand-400 transition-all duration-500" style={{ width: `${(filled / required.length) * 100}%` }} />
         </div>
         <ul className="divide-y divide-slate-100 dark:divide-white/5">
           {rows.map((row) => (

@@ -30,6 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
+from worldtour_ai.config.settings import get_settings
 from worldtour_ai.services.chat_session import chat_step
 from worldtour_ai.services.exporter import file_stem, plan_calendar, plan_text
 from worldtour_ai.workflows.state import fresh_state
@@ -125,7 +126,18 @@ def root() -> dict:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "access_code_required": bool(os.environ.get("ACCESS_CODE"))}
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "access_code_required": bool(os.environ.get("ACCESS_CODE")),
+        # Which data sources are configured (never the keys themselves), to explain fallbacks.
+        "sources": {
+            "live_fares_and_hotels": bool(settings.serpapi_api_key),
+            "ai": bool(settings.openrouter_api_key),
+            "maps_and_places": bool(settings.geoapify_api_key),
+            "flight_schedules": bool(settings.aviationstack_api_key),
+        },
+    }
 
 
 @app.post("/api/chat")
