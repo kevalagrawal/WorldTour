@@ -1,5 +1,5 @@
 // Builds static, crawlable destination guides (dist/trip-planner/<slug>.html, served at /trip-planner/<slug>
-// through cleanUrls in vercel.json), the guide index and
+// through the rewrites in vercel.json), the guide index and
 // sitemap.xml after `vite build`. Each guide answers common searches ("Goa trip planner", "Jaipur itinerary
 // 3 days") with plain HTML that loads instantly, and links into the planner with the prompt pre-filled.
 
