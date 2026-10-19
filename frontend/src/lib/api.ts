@@ -22,6 +22,20 @@ export class ApiError extends Error {
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/** Resolves once the browser is back online (or after maxMs), so retries don't burn out during an outage. */
+function backOnline(maxMs = 45000): Promise<void> {
+  if (typeof navigator === 'undefined' || navigator.onLine) return Promise.resolve()
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer)
+      window.removeEventListener('online', done)
+      resolve()
+    }
+    const timer = setTimeout(done, maxMs)
+    window.addEventListener('online', done)
+  })
+}
+
 function headers(accessCode: string | null): HeadersInit {
   return { 'Content-Type': 'application/json', ...(accessCode ? { 'X-Access-Code': accessCode } : {}) }
 }
@@ -46,6 +60,7 @@ async function request(path: string, init: RequestInit, { retries = 2, timeoutMs
     } catch (error) {
       clearTimeout(timer)
       if (attempt < retries) {
+        await backOnline()
         await wait(800 * 2 ** attempt)
         continue
       }
@@ -142,6 +157,7 @@ export async function runPlan(
     } catch (error) {
       if (!(error instanceof ApiError) || !error.network || attempt >= 2) throw error
       onRestart?.()
+      await backOnline()
       await wait(1500 * (attempt + 1))
     }
   }

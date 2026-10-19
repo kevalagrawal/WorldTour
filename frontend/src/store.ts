@@ -17,6 +17,7 @@ interface State {
   accessCode: string | null
   needsAccessCode: boolean
   send: (text: string) => Promise<void>
+  /** Re-sends the last unanswered message, or restarts planning. */
   retry: () => Promise<void>
   reset: () => void
   setAccessCode: (code: string) => void
@@ -82,7 +83,12 @@ export const useStore = create<State>()(
         send: async (text: string) => {
           const message = text.trim()
           if (!message || get().status !== 'idle') return
-          set((s) => ({ messages: [...s.messages, { role: 'user', content: message, at: now() }], status: 'thinking', error: null }))
+          set((s) => ({
+            // A message that failed earlier is replaced by this attempt rather than shown twice.
+            messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }],
+            status: 'thinking',
+            error: null,
+          }))
           try {
             const response = await sendChat(get().session, message, get().accessCode)
             set((s) => ({
@@ -96,15 +102,20 @@ export const useStore = create<State>()(
             }
             await plan(response.session)
           } catch (error) {
-            // If the chat failed before an answer, drop the unanswered message so it can be re-sent cleanly.
+            // If the chat failed before an answer, keep the message on screen marked as not sent,
+            // so the traveler stays in the conversation and can send it again with one tap.
             if (get().status === 'thinking') {
-              set((s) => ({ messages: s.messages.at(-1)?.role === 'user' ? s.messages.slice(0, -1) : s.messages }))
+              set((s) => ({
+                messages: s.messages.map((m, i) => (i === s.messages.length - 1 && m.role === 'user' ? { ...m, failed: true } : m)),
+              }))
             }
             handleError(error)
           }
         },
 
         retry: async () => {
+          const unsent = get().messages.at(-1)
+          if (unsent?.role === 'user' && unsent.failed) return get().send(unsent.content)
           const { session } = get()
           if (!session || session.stage !== 'ready' || get().status !== 'idle') return
           set({ error: null })

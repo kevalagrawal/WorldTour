@@ -5,6 +5,8 @@ export interface ChatMessage {
   role: Role
   content: string
   at?: string
+  /** A traveler message that never got an answer (e.g. the connection dropped). */
+  failed?: boolean
 }
 
 export interface Summary {

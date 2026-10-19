@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { AlertTriangle, RefreshCw, Sparkles, X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { AlertTriangle, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { useStore } from '../store'
 import { Composer } from './Composer'
 import { MessageContent } from './MessageContent'
@@ -25,6 +25,20 @@ function time(at?: string) {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function subscribeOnline(callback: () => void) {
+  window.addEventListener('online', callback)
+  window.addEventListener('offline', callback)
+  return () => {
+    window.removeEventListener('online', callback)
+    window.removeEventListener('offline', callback)
+  }
+}
+
+/** Whether the browser currently has a network connection. */
+function useOnline() {
+  return useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true)
+}
+
 function AssistantAvatar({ small = false }: { small?: boolean }) {
   return (
     <div className={clsx('grid shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-800 text-white shadow-sm', small ? 'h-7 w-7' : 'h-9 w-9')}>
@@ -37,6 +51,8 @@ export function ChatPanel() {
   const { messages, status, error, notice, send, retry, dismissError, plan, session } = useStore()
   const listRef = useRef<HTMLDivElement>(null)
   const busy = status !== 'idle'
+  const online = useOnline()
+  const unsent = messages.at(-1)?.role === 'user' && !!messages.at(-1)?.failed
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' })
@@ -53,8 +69,16 @@ export function ChatPanel() {
         <div className="min-w-0 flex-1">
           <div className="font-display text-sm font-bold text-slate-900 dark:text-white">Travel assistant</div>
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <span className={clsx('h-1.5 w-1.5 rounded-full', busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-500')} />
-            {status === 'planning' ? 'Building your plan…' : status === 'thinking' ? 'Typing…' : 'Online · replies in seconds'}
+            <span className={clsx('h-1.5 w-1.5 rounded-full', !online ? 'bg-rose-500' : busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-500')} />
+            {!online
+              ? busy
+                ? "You're offline — we'll carry on when you're back"
+                : "You're offline"
+              : status === 'planning'
+                ? 'Building your plan…'
+                : status === 'thinking'
+                  ? 'Typing…'
+                  : 'Online · replies in seconds'}
           </div>
         </div>
       </div>
@@ -66,10 +90,21 @@ export function ChatPanel() {
           if (message.role === 'user') {
             return (
               <div key={index} className="flex animate-fade-up flex-col items-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm">
+                <div
+                  className={clsx(
+                    'max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gradient-to-br from-brand-600 to-brand-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-sm',
+                    message.failed && 'opacity-60',
+                  )}
+                >
                   {message.content}
                 </div>
-                {time(message.at) && <span className="mt-1 text-[11px] text-slate-400">{time(message.at)}</span>}
+                {message.failed ? (
+                  <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-300">
+                    <AlertTriangle size={11} /> Not sent
+                  </span>
+                ) : (
+                  time(message.at) && <span className="mt-1 text-[11px] text-slate-400">{time(message.at)}</span>
+                )}
               </div>
             )
           }
@@ -124,15 +159,14 @@ export function ChatPanel() {
                   <X size={15} />
                 </button>
               </div>
-              {session?.stage === 'ready' && (
+              {(unsent || session?.stage === 'ready') && (
                 <button
                   onClick={() => void retry()}
                   className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
                 >
-                  <RefreshCw size={13} /> Try planning again
+                  {unsent ? <WifiOff size={13} /> : <RefreshCw size={13} />} {unsent ? 'Send again' : 'Try planning again'}
                 </button>
               )}
-              {session?.stage !== 'ready' && <p className="mt-1.5 text-xs opacity-80">Your message wasn't lost — just send it again.</p>}
             </div>
           </div>
         )}
