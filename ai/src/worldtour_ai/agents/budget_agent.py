@@ -12,6 +12,7 @@ from worldtour_ai.tools.toolkit import currency_tool, intercity_cost_tool, knaps
 from worldtour_ai.utils.money import display_currency, format_money
 
 COST_KEYS = ("transport_cost", "intercity_cost", "hotel_cost", "food_cost", "local_cost")
+MAX_HOTEL_KM = 25  # packages prefer hotels within this distance of the city centre
 
 # Daily food and local-transport multipliers per package (planning estimates).
 PACKAGES = {
@@ -277,6 +278,9 @@ def _hotel_for_package(package: str, hotels: list[dict], share: float, nights: i
         return None
     priced = [h for h in hotels if isinstance(h.get("price_per_night"), (int, float))] or hotels
     verified = [h for h in priced if h.get("verified_on_map") is not False] or priced
+    # A hotel far from the centre (e.g. 60 km away in a large region like Goa) leaves no sights within reach.
+    central = [h for h in verified if not isinstance(h.get("distance_to_center_km"), (int, float)) or h["distance_to_center_km"] <= MAX_HOTEL_KM]
+    verified = central or verified
 
     def cost(hotel: dict) -> float:
         return _money(hotel, "price_per_night") * max(nights, 1) * rooms
