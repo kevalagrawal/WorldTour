@@ -340,7 +340,8 @@ function Hotels({ plan, display }: { plan: Plan; display: Display }) {
           const nights = nightsFor(city)
           const currentHotel = hotels.find((h) => chosen.has(h.option_id))
           const currentCost = (currentHotel?.price_per_night ?? 0) * nights * pricing.rooms
-          const sorted = [...hotels].sort((a, b) => Number(chosen.has(b.option_id)) - Number(chosen.has(a.option_id)) || (a.price_per_night ?? 0) - (b.price_per_night ?? 0))
+          // A fixed order (cheapest first): choosing a hotel highlights it in place instead of moving it.
+          const sorted = [...hotels].sort((a, b) => (a.price_per_night ?? Infinity) - (b.price_per_night ?? Infinity))
           return (
             <div key={city}>
               {cities.length > 1 && (

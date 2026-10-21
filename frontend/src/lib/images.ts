@@ -3,11 +3,22 @@
 import { useEffect, useState } from 'react'
 
 const STANDARD_WIDTHS = [330, 500, 960, 1280, 1920]
+// Words that say what kind of place it is, not which one.
+const GENERIC_WORDS = ['beach', 'fort', 'temple', 'church', 'market', 'view', 'point', 'viewpoint', 'city', 'palace', 'lake', 'museum',
+  'park', 'garden', 'gardens', 'falls', 'waterfall', 'hill', 'hills', 'road', 'street', 'square', 'mall', 'bazaar', 'national', 'old', 'new', 'the']
+/** Lower-case words without accents ("Sensō-ji" → ["senso", "ji"]). */
+const words = (text: string) =>
+  text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
 const cache = new Map<string, Promise<string | null>>()
 
 function stored(key: string): string | null | undefined {
   try {
-    const value = sessionStorage.getItem(`wt-img2:${key}`)
+    const value = sessionStorage.getItem(`wt-img3:${key}`)
     return value === null ? undefined : value || null
   } catch {
     return undefined
@@ -16,7 +27,7 @@ function stored(key: string): string | null | undefined {
 
 function remember(key: string, url: string | null) {
   try {
-    sessionStorage.setItem(`wt-img2:${key}`, url ?? '')
+    sessionStorage.setItem(`wt-img3:${key}`, url ?? '')
   } catch {
     /* the in-memory cache still works */
   }
@@ -97,7 +108,16 @@ export function placeImage(name: string, city: string | null | undefined, width 
         const page = Object.values(data.query?.pages ?? {})[0]
         if (!page?.thumbnail) return null
         const about = `${page.title} ${page.extract ?? ''}`.toLowerCase()
-        return !city || about.includes(city.toLowerCase()) ? page.thumbnail.source : null
+        if (city && !about.includes(city.toLowerCase())) return null
+        // Logos, flags, seals and maps are never a photo of the place.
+        if (/logo|flag|seal|emblem|coat_of_arms|symbol|locator|map|\.svg/i.test(decodeURIComponent(page.thumbnail.source))) return null
+        // The article must be about this place: its title shares a distinctive word with the name
+        // ("Albert Hall Museum" for "Albert Hall"), not just the city (a party called "Goa Forward" for a beach).
+        const title = words(page.title).join(' ')
+        const ignore = new Set([...GENERIC_WORDS, ...(city ? words(city) : [])])
+        const distinctive = words(name).filter((word) => word.length >= 4 && !ignore.has(word))
+        const matches = distinctive.length ? distinctive.some((word) => title.includes(word)) : title.includes(words(name).join(' '))
+        return matches ? page.thumbnail.source : null
       } catch {
         return null
       }

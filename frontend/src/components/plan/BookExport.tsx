@@ -82,16 +82,6 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
             <li key={note} className="flex gap-2"><span className="text-slate-400">•</span>{note}</li>
           ))}
         </ul>
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-200">How this plan was optimized</summary>
-          <div className="mt-2 space-y-1 text-slate-600 dark:text-slate-400">
-            <p>Algorithms used: {plan.algorithms_actually_used.join(', ')}.</p>
-            {plan.routes.dijkstra?.path?.length ? (
-              <p>Shortest route through today's places (Dijkstra/A*): {plan.routes.dijkstra.path.join(' → ')} ({plan.routes.dijkstra.total_cost_km.toFixed(1)} km).</p>
-            ) : null}
-            <p>The AI writes descriptions only; places, times, prices and choices come from the planner's algorithms and live data.</p>
-          </div>
-        </details>
       </Card>
     </div>
   )

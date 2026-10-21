@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { Moon, Plus, RotateCcw, Sun } from 'lucide-react'
 import { useCallback, useState } from 'react'
+import { focusTripInput } from '../lib/focus'
 import { prettyDate } from '../lib/money'
 import { useStarted, useStore } from '../store'
 import { ConfirmDialog, Logo } from './ui'
@@ -86,6 +87,10 @@ export function Header() {
           {!started && (
             <a
               href="#plan"
+              onClick={(event) => {
+                event.preventDefault()
+                focusTripInput()
+              }}
               className="ml-1 hidden h-9 items-center rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white transition hover:bg-brand-800 sm:inline-flex dark:bg-brand-500 dark:hover:bg-brand-400"
             >
               Start planning

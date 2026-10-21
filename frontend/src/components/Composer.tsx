@@ -11,10 +11,12 @@ interface Props {
   hint?: boolean
   /** Text to start with, e.g. a prompt from a destination guide link. */
   initialText?: string
+  /** id for the text box, so other parts of the page can focus it. */
+  inputId?: string
 }
 
 /** Auto-growing message box: Enter sends, Shift+Enter adds a line. */
-export function Composer({ onSend, busy = false, placeholder = 'Describe your trip…', size = 'md', autoFocus = false, hint = true, initialText = '' }: Props) {
+export function Composer({ onSend, busy = false, placeholder = 'Describe your trip…', size = 'md', autoFocus = false, hint = true, initialText = '', inputId }: Props) {
   const [text, setText] = useState(initialText)
   const ref = useRef<HTMLTextAreaElement>(null)
 
@@ -45,6 +47,7 @@ export function Composer({ onSend, busy = false, placeholder = 'Describe your tr
         )}
       >
         <textarea
+          id={inputId}
           ref={ref}
           value={text}
           autoFocus={autoFocus}

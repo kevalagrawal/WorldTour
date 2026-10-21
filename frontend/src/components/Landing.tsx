@@ -1,5 +1,6 @@
 import { ArrowRight, BedDouble, CalendarClock, CheckCircle2, CloudSun, Coins, MessagesSquare, Plane, ShieldCheck, Sparkles, TrainFront, Wand2 } from 'lucide-react'
 import { useState } from 'react'
+import { focusTripInput } from '../lib/focus'
 import { useWikiImage } from '../lib/images'
 import { useStore } from '../store'
 import { Composer } from './Composer'
@@ -103,7 +104,7 @@ export function Landing() {
             </p>
 
             <div className="mt-8 max-w-xl rounded-2xl bg-white p-3 text-slate-900 shadow-2xl dark:bg-ink-800 dark:text-white">
-              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" initialText={initialPrompt} autoFocus={!!initialPrompt} />
+              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" initialText={initialPrompt} autoFocus={!!initialPrompt} inputId="trip-input" />
               <div className="mt-3 flex flex-wrap gap-2 px-1 pb-1">
                 {PROMPTS.map((prompt) => (
                   <button
@@ -198,7 +199,7 @@ export function Landing() {
           <div className="absolute inset-x-0 top-0 h-1 bg-coral-500" />
           <h2 className="relative text-3xl font-extrabold sm:text-4xl">Where to next?</h2>
           <p className="relative mx-auto mt-3 max-w-lg text-white/80">Describe the trip and get a complete, costed plan in about a minute.</p>
-          <a href="#plan" className="relative mt-7 inline-flex items-center gap-2 rounded-lg bg-coral-500 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-coral-600">
+          <a href="#plan" onClick={(event) => { event.preventDefault(); focusTripInput() }} className="relative mt-7 inline-flex items-center gap-2 rounded-lg bg-coral-500 px-5 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-coral-600">
             Start planning <ArrowRight size={16} />
           </a>
         </div>

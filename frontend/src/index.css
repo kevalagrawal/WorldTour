@@ -136,9 +136,10 @@ html::-webkit-scrollbar,
   display: none;
 }
 @media print {
+  /* Edge to edge: the travel document adds its own spacing on every page. */
   @page {
     size: A4;
-    margin: 12mm 11mm;
+    margin: 0;
   }
   html, body {
     background: white !important;

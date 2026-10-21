@@ -1,8 +1,9 @@
 import clsx from 'clsx'
-import { AlertTriangle, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
-import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { AlertTriangle, CalendarDays, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useActivePlan, useStore } from '../store'
 import { Composer } from './Composer'
+import { DatePicker } from './DatePicker'
 import { MessageContent } from './MessageContent'
 import { useProgress } from '../lib/progress'
 
@@ -67,6 +68,15 @@ export function ChatPanel() {
   const quick = busy ? [] : session?.stage === 'feasibility' ? FEASIBILITY : plan && session?.stage === 'planned' ? afterPlan : []
   const daysChip = plan?.duration.days && session?.stage === 'planned' && !busy ? [{ label: `${plan.duration.days + 1} days`, send: `${plan.duration.days + 1} days` }] : []
   const progress = useProgress()
+  // The calendar opens by itself when the assistant asks for dates; after a plan it is one tap away.
+  const askingDates = !busy && session?.stage === 'collecting' && Array.isArray(session.pending) && (session.pending as string[]).includes('start_date')
+  const [calendar, setCalendar] = useState<{ open: boolean; at: number }>({ open: false, at: -1 })
+  const askedAt = askingDates ? messages.length : -1
+  const calendarOpen = askingDates ? !(calendar.at === askedAt && !calendar.open) : calendar.open && session?.stage === 'planned' && !busy
+  const sendDates = (text: string) => {
+    setCalendar({ open: false, at: askedAt })
+    void send(text)
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white dark:bg-ink-900">
@@ -178,8 +188,44 @@ export function ChatPanel() {
         )}
       </div>
 
-      {(quick.length > 0 || daysChip.length > 0) && (
+      {calendarOpen && (
+        <div className="px-3 pb-2.5">
+          <DatePicker
+            mode={askingDates ? 'ask' : 'change'}
+            busy={busy}
+            onSend={sendDates}
+            onClose={() => setCalendar({ open: false, at: askedAt })}
+          />
+        </div>
+      )}
+
+      {(quick.length > 0 || daysChip.length > 0 || askingDates || (plan && session?.stage === 'planned' && !busy)) && (
         <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2.5">
+          {askingDates && !calendarOpen && (
+            <button
+              onClick={() => setCalendar({ open: true, at: askedAt })}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3.5 py-1.5 text-xs font-semibold text-brand-800 shadow-sm transition hover:bg-brand-100 dark:border-brand-400/40 dark:bg-brand-500/15 dark:text-brand-100"
+            >
+              <CalendarDays size={13} /> Pick dates
+            </button>
+          )}
+          {askingDates && (
+            <button
+              onClick={() => sendDates('flexible')}
+              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
+            >
+              I'm flexible
+            </button>
+          )}
+          {plan && session?.stage === 'planned' && !busy && (
+            <button
+              onClick={() => setCalendar((c) => ({ open: !c.open, at: -1 }))}
+              aria-expanded={calendarOpen}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
+            >
+              <CalendarDays size={13} /> Change dates
+            </button>
+          )}
           {[...quick, ...daysChip].map((chip) => (
             <button
               key={chip.label}

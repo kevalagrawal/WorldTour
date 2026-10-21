@@ -383,6 +383,22 @@ def _extract_route_phrase(raw: str, mentions, data: dict) -> None:
         if origin:
             data["origin"] = origin.name
         return
+    # "Goa from Mumbai", "Plan a Jaipur trip from Delhi": the place before "from" is where they are going.
+    from_match = re.search(r"\bfrom\s+([A-Za-z][A-Za-z\s]+)", raw, flags=re.IGNORECASE)
+    if from_match:
+        origin = _place_in_span(from_match.group(1))
+        before = [place for start, _end, place in mentions if start < from_match.start()]
+        if origin and before and before[0].name != origin.name:
+            destination = before[0]
+            data["origin"] = origin.name
+            data["destination"] = destination.name
+            if destination.kind == "region" and destination.suggested_cities and not data["cities"]:
+                data["cities"] = list(destination.suggested_cities)
+                data["cities_are_suggestions"] = True
+                data["parser_notes"].append(
+                    f"Cities {', '.join(destination.suggested_cities)} are suggestions for {destination.name}, not places you named."
+                )
+            return
     to_match = re.search(r"\b(?:to|in|explore|visit|visiting)\s+([A-Za-z][A-Za-z\s]+)", raw)
     if to_match and not data.get("destination"):
         place = _place_in_span(to_match.group(1))
@@ -532,6 +548,15 @@ def _extract_dates(lowered: str, data: dict) -> None:
     suffix = r"(?:st|nd|rd|th)?"
     span = rf"(?:\s*(?:-|–|to|until|till)\s*(\d{{1,2}}){suffix})?"
     if not found:
+        # Two full dates, e.g. "12 Dec 2026 to 18 Dec 2026"; a year on the second one applies to both.
+        full = list(re.finditer(rf"\b(\d{{1,2}}){suffix}\s+(?:of\s+)?({_MONTH_ALT})\b(?:,?\s+(\d{{4}}))?", lowered))
+        if len(full) >= 2:
+            year_end = full[1][3]
+            year_start = full[0][3] or year_end
+            start = _future_date(int(year_start) if year_start else None, _MONTHS[full[0][2]], int(full[0][1]))
+            end = _future_date(int(year_end) if year_end else None, _MONTHS[full[1][2]], int(full[1][1]), after=start)
+            found += [start, end]
+    if not found:
         day_first = re.search(rf"\b(\d{{1,2}}){suffix}{span}\s+(?:of\s+)?({_MONTH_ALT})\b(?:,?\s+(\d{{4}}))?", lowered)
         month_first = re.search(rf"\b({_MONTH_ALT})\s+(\d{{1,2}}){suffix}{span}(?:,?\s+(\d{{4}}))?\b", lowered)
         if day_first:
@@ -632,7 +657,9 @@ def _coerce(field: str, text: str, data: dict) -> None:
                 data["cities_are_suggestions"] = True
     elif field == "duration_days":
         _extract_duration(text.lower(), data)
-        if "duration_days" not in data:
+        # A bare number means days, unless it is part of a date ("12 Dec 2026 to 18 Dec 2026").
+        has_date = re.search(rf"\b\d{{4}}-\d{{1,2}}-\d{{1,2}}\b|\b({_MONTH_ALT})\b", text.lower())
+        if "duration_days" not in data and not has_date:
             token = re.search(r"\d+", text)
             if token:
                 data["duration_days"] = int(token.group(0))
