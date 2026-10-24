@@ -400,8 +400,9 @@ function AccountTab() {
       await server('/api/me', { method: 'DELETE' })
       useAccount.getState().clear()
       reset()
-      await signOut().catch(() => undefined)
+      // Leave the account pages first: signing out while still here would bounce to the sign-in page.
       navigate('/', { replace: true })
+      await signOut({ redirectUrl: '/' }).catch(() => undefined)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The account could not be deleted.')
       setBusy(false)

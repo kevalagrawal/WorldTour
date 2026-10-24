@@ -129,7 +129,11 @@ function SignedInMenu() {
             <button role="menuitem" onClick={toggleTheme} className={item}>{dark ? <Sun size={16} /> : <Moon size={16} />} {dark ? 'Light theme' : 'Dark theme'}</button>
             <button
               role="menuitem"
-              onClick={() => void signOut().then(() => { useAccount.getState().clear(); navigate('/') })}
+              onClick={() => {
+                // Leave account pages before signing out, or their sign-in guard bounces to /sign-in.
+                navigate('/')
+                void signOut({ redirectUrl: '/' }).then(() => useAccount.getState().clear())
+              }}
               className={clsx(item, 'text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10')}
             >
               <LogOut size={16} /> Sign out
