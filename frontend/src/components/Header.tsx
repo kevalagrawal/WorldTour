@@ -40,7 +40,9 @@ export function Header() {
   // The planner layout (trip pill, wide header) only on the planner page.
   const started = hasConversation && onHome
   const { signedIn } = useSession()
-  const accountTheme = ACCOUNTS_ENABLED && signedIn && !!useAccount((s) => s.profile)
+  // Hooks run on every render, in the same order (calling one only after sign-in crashes React).
+  const hasProfile = !!useAccount((s) => s.profile)
+  const accountTheme = ACCOUNTS_ENABLED && signedIn && hasProfile
   const { reset, status, summary, plan } = useStore()
   const busy = status !== 'idle'
   const [confirming, setConfirming] = useState(false)

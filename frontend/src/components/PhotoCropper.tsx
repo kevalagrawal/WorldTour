@@ -26,6 +26,11 @@ async function uploadPhoto(blob: Blob): Promise<Profile> {
   form.append('signature', signed.signature)
   const response = await fetch(signed.uploadUrl, { method: 'POST', body: form })
   const data = await response.json().catch(() => ({}))
+  if (response.status === 401 || response.status === 403) {
+    // The photo service refused the upload (e.g. its API key lacks upload permission): not the traveler's fault.
+    console.warn('[photo] Cloudinary refused the upload:', data?.error?.message)
+    throw new Error('Photo uploads are not available right now. You can skip this step and add a photo later in Settings.')
+  }
   if (!response.ok || !data.secure_url) throw new Error(data?.error?.message || 'The photo could not be uploaded. Please try another one.')
   const { user } = await server<{ user: Profile }>('/api/me/photo', { method: 'PATCH', body: { publicId: data.public_id, url: data.secure_url } })
   return user
