@@ -56,6 +56,28 @@ PLACES: tuple[Place, ...] = (
     _city("Lucknow", 26.8467, 80.9462, "LKO", "India"),
     _city("Guwahati", 26.1445, 91.7362, "GAU", "India"),
     _city("Port Blair", 11.6234, 92.7265, "IXZ", "India", ("andaman",)),
+    # Hill stations and small towns use the nearest practical airport for flights.
+    _city("Rishikesh", 30.0869, 78.2676, "DED", "India"),
+    _city("Haridwar", 29.9457, 78.1642, "DED", "India"),
+    _city("Dehradun", 30.3165, 78.0322, "DED", "India"),
+    _city("Mussoorie", 30.4598, 78.0644, "DED", "India"),
+    _city("Nainital", 29.3803, 79.4636, "PGH", "India"),
+    _city("Ooty", 11.4102, 76.6950, "CJB", "India", ("udhagamandalam", "ooty hills")),
+    _city("Coorg", 12.4244, 75.7382, "IXE", "India", ("kodagu", "madikeri")),
+    _city("Mysuru", 12.2958, 76.6394, "BLR", "India", ("mysore",)),
+    _city("Munnar", 10.0889, 77.0595, "COK", "India"),
+    _city("Alappuzha", 9.4981, 76.3388, "COK", "India", ("alleppey",)),
+    _city("Puducherry", 11.9416, 79.8083, "MAA", "India", ("pondicherry", "pondy")),
+    _city("Darjeeling", 27.0410, 88.2663, "IXB", "India"),
+    _city("Gangtok", 27.3389, 88.6065, "IXB", "India"),
+    _city("Chandigarh", 30.7333, 76.7794, "IXC", "India"),
+    _city("Indore", 22.7196, 75.8577, "IDR", "India"),
+    _city("Nagpur", 21.1458, 79.0882, "NAG", "India"),
+    _city("Bhubaneswar", 20.2961, 85.8245, "BBI", "India"),
+    _city("Jaisalmer", 26.9157, 70.9083, "JSA", "India"),
+    _city("Mount Abu", 24.5926, 72.7156, "UDR", "India"),
+    _city("Pushkar", 26.4897, 74.5511, "JAI", "India"),
+    _city("Pokhara", 28.2096, 83.9856, "PKR", "Nepal"),
     _city("Dubai", 25.2048, 55.2708, "DXB", "United Arab Emirates"),
     _city("Abu Dhabi", 24.4539, 54.3773, "AUH", "United Arab Emirates"),
     _city("Kathmandu", 27.7172, 85.3240, "KTM", "Nepal"),
@@ -110,7 +132,10 @@ PLACES: tuple[Place, ...] = (
     _region("California", 34.0522, -118.2437, "United States", ("cali", "socal", "norcal"), ("Los Angeles", "San Francisco", "San Diego"), "LAX"),
     _region("Florida", 25.7617, -80.1918, "United States", (), ("Miami", "Orlando"), "MIA"),
     _region("United States", 40.7128, -74.0060, "United States", ("usa", "america"), ("New York", "Chicago", "San Francisco"), "JFK"),
-    _region("Kerala", 9.9312, 76.2673, "India", (), ("Kochi",), "COK"),
+    _region("Kerala", 9.9312, 76.2673, "India", (), ("Kochi", "Munnar", "Alappuzha"), "COK"),
+    _region("Uttarakhand", 30.3165, 78.0322, "India", (), ("Rishikesh", "Mussoorie"), "DED"),
+    _region("Sikkim", 27.3389, 88.6065, "India", (), ("Gangtok",), "IXB"),
+    _region("Nepal", 27.7172, 85.3240, "Nepal", (), ("Kathmandu", "Pokhara"), "KTM"),
     _region("Kashmir", 34.0837, 74.7973, "India", (), ("Srinagar",), "SXR"),
     _region("Ladakh", 34.1526, 77.5771, "India", (), ("Leh",), "IXL"),
     _region("Switzerland", 47.3769, 8.5417, "Switzerland", (), ("Zurich",), "ZRH"),
@@ -133,6 +158,11 @@ def lookup_place(name: str | None) -> Place | None:
     if not name:
         return None
     return _BY_ALIAS.get(normalize(name))
+
+
+def place_aliases() -> list[str]:
+    """Every name and alias the catalog knows, for typo correction."""
+    return list(_BY_ALIAS)
 
 
 def find_mentions(text: str) -> list[tuple[int, int, Place]]:

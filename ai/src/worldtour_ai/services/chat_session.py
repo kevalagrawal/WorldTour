@@ -31,7 +31,9 @@ from worldtour_ai.services.intake import (
 from worldtour_ai.services.request_parser import (
     clarification_message,
     grounded_llm_fields,
+    missing_essential,
     parse_travel_text,
+    trip_start,
     user_skipped,
 )
 from worldtour_ai.utils.money import display_currency
@@ -67,35 +69,122 @@ def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
         session["request"] = data
         return _check_feasibility(session, history, changes, round_number=int(session.get("feasibility_round") or 0) + 1)
 
-    # Collecting the trip details.
+    # Collecting the trip details. The built-in parser reads the message instantly; the AI is asked only
+    # when an essential detail is still missing (it is slow, but cheaper for the traveler than a question).
     if session.get("request") is None:
         request = parse_travel_text(text or "trip", use_llm=False)
-        data = request.model_dump()
-        if use_llm:
+        if use_llm and _ai_might_help(request, text):
+            data = request.model_dump()
             merge_grounded(data, _llm_fields_within_limit(text))
-        request = TravelRequest.model_validate(data)
+            request = TravelRequest.model_validate(data)
     elif user_skipped(text):
         session["skipped"] = [*session.get("skipped", []), *(f for f in session.get("pending", []) if f not in _OPTIONAL)]
         request = TravelRequest.model_validate(session["request"])
     else:
-        request = parse_travel_text(text, pending_fields=session.get("pending") or [], previous=session["request"], use_llm=False)
+        pending = session.get("pending") or []
+        request = parse_travel_text(text, pending_fields=pending, previous=session["request"], use_llm=False)
+        still = [field for field in pending if field not in _OPTIONAL and field in _essentials_missing(request)]
+        if use_llm and still and len(still) == len([f for f in pending if f not in _OPTIONAL]):
+            # Nothing in the answer was understood: let the AI read it in the context of the question.
+            data = request.model_dump()
+            merge_grounded(data, _llm_fields_within_limit(f"{_question_context(pending)} Answer: {text}"))
+            request = TravelRequest.model_validate(data)
     round_number = int(session.get("round") or 0)
     missing = [field for field in intake_missing(request, round_number == 0) if field not in session.get("skipped", [])]
     if missing and round_number < MAX_ROUNDS:
         session.update(request=request.model_dump(), pending=missing, round=round_number + 1)
-        return _reply(session, history, clarification_message(missing))
+        said = " ".join(item["content"] for item in history if item["role"] == "user")
+        return _reply(session, history, _ask(request, missing, said))
     data = finalize_collected(request, session.get("skipped", []), None)
     trim_suggested_cities(data)
     session.update(request=data, pending=[])
     return _check_feasibility(session, history, changes, round_number=0)
 
 
-def _llm_fields_within_limit(text: str) -> dict | None:
-    """The AI reading of the first message, but never longer than PARSER_LLM_WAIT_SECONDS.
+def _essentials_missing(request: TravelRequest) -> list[str]:
+    missing = missing_essential(request)
+    if not request.travelers:
+        missing.append("travelers")
+    return missing
 
-    The heuristic parse already has the essentials, so a slow free model must not
-    keep the user waiting for the first reply.
-    """
+
+def _ai_might_help(request: TravelRequest, text: str) -> bool:
+    """The AI can only find what the message contains: worth the wait when a detail other than the
+    destination is missing from a message long enough to hold it ("somewhere with snow" names no place)."""
+    return bool(set(_essentials_missing(request)) - {"destination"}) and len(text.split()) >= 8
+
+
+def _question_context(pending: list[str]) -> str:
+    return "The traveler was asked for: " + ", ".join(pending).replace("_", " ") + "."
+
+
+def _ask(request: TravelRequest, missing: list[str], said: str = "") -> str:
+    """Say what was understood, then ask only for what is missing (with destination ideas when none was given)."""
+    known = understood(request.model_dump())
+    question = clarification_message(missing)
+    if "destination" in missing:
+        ideas = destination_ideas(request, said)
+        question = question.replace("Where do you want to go?", f"Where do you want to go? ({ideas})")
+    if not known:
+        return question
+    lead = "I can plan that." if len(missing) == 1 else "I can plan this trip, but I need a few details."
+    return question.replace(lead, f"Got it: {known}.\n\n" + ("Just one more thing." if len(missing) == 1 else "A few more details:"), 1)
+
+
+def understood(request: dict) -> str:
+    """'Mumbai → Goa · 4 days · 2 travelers · 40,000 INR · beach' from whatever is known so far."""
+    parts = []
+    origin, destination = request.get("origin"), request.get("destination")
+    cities = [c for c in request.get("cities") or [] if c != destination]
+    where = destination if destination and destination != "Multi-city" else ", ".join(cities)
+    if destination and destination != "Multi-city" and cities and not request.get("cities_are_suggestions"):
+        where = ", ".join([destination, *cities])
+    if origin and where:
+        parts.append(f"{origin} → {where}")
+    elif where:
+        parts.append(f"a trip to {where}")
+    elif origin:
+        parts.append(f"from {origin}")
+    if request.get("duration_days"):
+        parts.append(f"{request['duration_days']} days")
+    if request.get("travelers"):
+        parts.append(f"{request['travelers']} traveler{'s' if request['travelers'] > 1 else ''}")
+    if request.get("budget") is not None:
+        amount = f"{request['budget']:,.0f} {request.get('currency') or ''}".strip()
+        parts.append(amount + (" each" if request.get("budget_scope") == "per_person" else ""))
+    if request.get("start_date"):
+        parts.append(f"from {request['start_date']}")
+    interests = [*(request.get("preferences") or [])]
+    if request.get("pace"):
+        interests.append(f"{request['pace']} pace")
+    if interests:
+        parts.append(", ".join(interests))
+    return " · ".join(parts)
+
+
+_IDEAS = [
+    (("beach", "beaches", "sea", "island"), "for beaches, Goa, Andaman or Puducherry are great"),
+    (("snow", "mountain", "mountains", "hill", "hills", "trek"), "for mountains and snow, Manali, Shimla or Kashmir"),
+    (("honeymoon", "romantic"), "for a honeymoon, Bali, the Maldives or Udaipur"),
+    (("history", "culture", "heritage"), "for history and culture, Jaipur, Udaipur or Varanasi"),
+    (("nature", "backwaters", "greenery"), "for nature, Kerala, Coorg or Munnar"),
+    (("spiritual", "temple", "yoga"), "for a spiritual trip, Rishikesh or Varanasi"),
+    (("adventure", "rafting"), "for adventure, Rishikesh, Manali or Leh Ladakh"),
+    (("shopping", "nightlife", "party", "parties"), "for shopping and nightlife, Dubai, Bangkok or Goa"),
+]
+
+
+def destination_ideas(request: TravelRequest, said: str = "") -> str:
+    words = {*(request.preferences or []), str(request.trip_type or "")}
+    words |= {item.strip(".,!?") for item in said.lower().split()}
+    for keys, text in _IDEAS:
+        if words & set(keys):
+            return text
+    return "for example Goa, Jaipur, Kerala, Manali or Dubai"
+
+
+def _llm_fields_within_limit(text: str) -> dict | None:
+    """The AI reading of a message, but never longer than PARSER_LLM_WAIT_SECONDS."""
     pool = ThreadPoolExecutor(max_workers=1)
     future = pool.submit(grounded_llm_fields, text)
     try:
@@ -114,7 +203,20 @@ def _check_feasibility(session: dict, history: list[dict], changes: list[str], r
     if issues:
         session["request"] = accept_remaining(session["request"])
     session.update(stage="ready", feasibility_round=0)
-    lead = ("Updating the plan: " + "; ".join(changes) + ".") if changes else "Great, I have everything I need."
+    if changes:
+        lead = "Updating the plan: " + "; ".join(changes) + "."
+    else:
+        request = session["request"]
+        lead = f"Great, I have everything I need: {understood(request)}."
+        assumed = []
+        if not request.get("start_date"):
+            start, _ = trip_start(request)
+            assumed.append(f"your dates are flexible, so I've planned from {start.strftime('%d %b %Y')} — tap \"Change dates\" to pick yours")
+        if not request.get("preferences") and not request.get("pace"):
+            assumed.append("you'll get a balanced mix of the top sights")
+        if assumed:
+            note = "; ".join(assumed)
+            lead += " " + note[0].upper() + note[1:] + "."
     return _reply(session, history, lead + " Planning your trip now…", ready=True, changes=changes)
 
 

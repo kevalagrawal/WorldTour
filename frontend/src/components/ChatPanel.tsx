@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { AlertTriangle, CalendarDays, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useActivePlan, useStore } from '../store'
 import { Composer } from './Composer'
@@ -59,7 +59,8 @@ export function ChatPanel() {
   // Package and travel-mode chips switch instantly in the browser; the others ask the planner.
   const afterPlan = active
     ? [
-        ...active.packages.filter((p) => p.name !== active.recommended_package).map((p) => ({ label: p.label, send: p.name })),
+        // All three packages; the current one is ticked.
+        ...active.packages.map((p) => ({ label: p.label, send: p.name, on: p.name === active.recommended_package })),
         ...(active.transport_choice?.kind !== 'flight' && active.selected_flights.some((f) => f.price != null) ? [{ label: 'By flight', send: 'by flight' }] : []),
         ...(active.transport_choice?.kind !== 'train' && active.ground_options.some((o) => o.kind === 'train') ? [{ label: 'By train', send: 'by train' }] : []),
         ...MORE,
@@ -226,15 +227,24 @@ export function ChatPanel() {
               <CalendarDays size={13} /> Change dates
             </button>
           )}
-          {[...quick, ...daysChip].map((chip) => (
-            <button
-              key={chip.label}
-              onClick={() => void send(chip.send)}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
-            >
-              {chip.label}
-            </button>
-          ))}
+          {[...quick, ...daysChip].map((chip) => {
+            const on = 'on' in chip && !!chip.on
+            return (
+              <button
+                key={chip.label}
+                onClick={() => !on && void send(chip.send)}
+                aria-pressed={'on' in chip ? on : undefined}
+                className={clsx(
+                  'inline-flex shrink-0 items-center gap-1 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-sm transition',
+                  on
+                    ? 'cursor-default border-brand-600 bg-brand-50 text-brand-900 dark:border-brand-400 dark:bg-brand-500/20 dark:text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15',
+                )}
+              >
+                {on && <Check size={12} />} {chip.label}
+              </button>
+            )
+          })}
         </div>
       )}
 

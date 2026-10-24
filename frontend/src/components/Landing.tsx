@@ -245,7 +245,14 @@ function SectionHeading({ eyebrow, title, text }: { eyebrow: string; title: stri
   )
 }
 
-/** A static, illustrative glimpse of what a finished plan looks like. */
+// The example plan's packages; tapping one shows how a real plan switches travel, hotel and total.
+const EXAMPLE_TIERS = [
+  { name: 'Budget', total: '₹33k', fits: true, travel: '🚆 Train Sleeper · ₹760', hotel: '🏨 Guesthouse · 3★', stars: '3★', rate: '🏨 Live rate ₹2,900/night' },
+  { name: 'Balanced', total: '₹40k', fits: true, travel: '🚆 Train 3AC · ₹1,770', hotel: '🏨 Boutique hotel · 4★', stars: '4★', rate: '🏨 Live rate ₹6,267/night' },
+  { name: 'Premium', total: '₹72k', fits: false, travel: '✈️ Flight · ₹9,400', hotel: '🏨 Beach resort · 5★', stars: '5★', rate: '🏨 Live rate ₹14,800/night' },
+] as const
+
+/** An illustrative glimpse of a finished plan; its packages can be tapped to compare. */
 function ProductPreview() {
   const rows = [
     { time: '09:30', icon: '🚕', text: 'Cab to Fort Aguada', meta: '9.7 km · 25 min · ₹195' },
@@ -254,27 +261,45 @@ function ProductPreview() {
     { time: '14:00', icon: '🏖️', text: 'Calangute Beach', meta: 'Beach · 2.5 h' },
     { time: '19:30', icon: '🍷', text: 'Dinner at Gunpowder', meta: 'Assagao' },
   ]
+  const [tier, setTier] = useState<(typeof EXAMPLE_TIERS)[number]['name']>('Balanced')
+  const chosen = EXAMPLE_TIERS.find((t) => t.name === tier) ?? EXAMPLE_TIERS[1]
   return (
-    <div className="relative mx-auto w-full max-w-md animate-fade-up lg:max-w-none" aria-hidden="true">
+    <div className="relative mx-auto w-full max-w-md animate-fade-up lg:max-w-none">
       <div className="relative rounded-2xl border border-white/10 bg-white p-5 text-slate-900 shadow-2xl dark:bg-ink-800 dark:text-white">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Example plan</div>
             <div className="font-display text-lg font-bold text-slate-900 dark:text-white">Goa · 4 days · 2 travelers</div>
           </div>
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Within budget</span>
+          <span
+            className={
+              chosen.fits
+                ? 'rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                : 'rounded-full bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+            }
+          >
+            {chosen.fits ? 'Within ₹60k budget' : 'Over ₹60k budget'}
+          </span>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          {[
-            ['Budget', '₹33k', false],
-            ['Balanced', '₹40k', true],
-            ['Premium', '₹72k', false],
-          ].map(([label, price, chosen]) => (
-            <div key={label as string} className={`rounded-xl border p-2.5 ${chosen ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600 dark:bg-brand-500/15' : 'border-slate-200 dark:border-white/10'}`}>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
-              <div className="font-display text-base font-bold text-slate-900 dark:text-white">{price}</div>
-            </div>
-          ))}
+        <div className="mt-4 grid grid-cols-3 gap-2" role="group" aria-label="Example packages — tap to compare">
+          {EXAMPLE_TIERS.map((item) => {
+            const on = item.name === tier
+            return (
+              <button
+                key={item.name}
+                onClick={() => setTier(item.name)}
+                aria-pressed={on}
+                className={`rounded-xl border p-2.5 text-left transition ${on ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600 dark:bg-brand-500/15' : 'border-slate-200 hover:border-brand-300 hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5'}`}
+              >
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.name}</div>
+                <div className="font-display text-base font-bold text-slate-900 dark:text-white">{item.total}</div>
+              </button>
+            )
+          })}
+        </div>
+        <div className="mt-2 grid gap-1.5 text-xs text-slate-600 sm:grid-cols-2 dark:text-slate-300">
+          <div className="rounded-lg bg-slate-50 px-2.5 py-1.5 dark:bg-ink-900">{chosen.travel}</div>
+          <div className="rounded-lg bg-slate-50 px-2.5 py-1.5 dark:bg-ink-900">{chosen.hotel}</div>
         </div>
         <div className="mt-4 rounded-xl bg-slate-50 p-3 dark:bg-ink-900">
           <div className="mb-2 flex items-center justify-between text-xs font-semibold text-slate-500">
@@ -297,11 +322,11 @@ function ProductPreview() {
       </div>
       <div className="float-slow absolute -top-11 left-6 hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-lift sm:block dark:border-white/10 dark:bg-ink-800">
         <div className="text-[11px] text-slate-500">Getting there</div>
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">🚆 Train 3AC · ₹1,770</div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">{chosen.travel}</div>
       </div>
       <div className="float-slow absolute -bottom-7 right-6 hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-900 shadow-lift [animation-delay:1.5s] sm:block dark:border-white/10 dark:bg-ink-800">
-        <div className="text-[11px] text-slate-500">Hotel · 4★</div>
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">🏨 Live rate ₹6,267/night</div>
+        <div className="text-[11px] text-slate-500">Hotel · {chosen.stars}</div>
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">{chosen.rate}</div>
       </div>
     </div>
   )

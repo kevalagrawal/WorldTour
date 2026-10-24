@@ -1,13 +1,16 @@
-import { PieChart as PieIcon } from 'lucide-react'
+import clsx from 'clsx'
+import { Check, PieChart as PieIcon } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { fillMoney, formatMoney, type Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
+import { useStore } from '../../store'
 import { Card, SectionTitle } from '../ui'
 
 const COLORS = ['#1d5ef1', '#0d9488', '#f59e0b', '#8b5cf6', '#ef4444', '#64748b']
 
 export function Costs({ plan, display }: { plan: Plan; display: Display }) {
   const rows = plan.budget_breakdown
+  const choosePackage = useStore((s) => s.choosePackage)
   const data = rows.filter((row) => row.cost > 0).map((row) => ({ name: row.category, value: row.cost }))
   const budget = plan.budget.planning_budget
   const used = budget ? Math.min(100, (plan.estimated_cost / budget) * 100) : null
@@ -71,13 +74,29 @@ export function Costs({ plan, display }: { plan: Plan; display: Display }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="mt-2 space-y-1">
-          {plan.packages.map((pkg) => (
-            <div key={pkg.name} className="flex justify-between text-sm">
-              <span className={pkg.name === plan.recommended_package ? 'font-semibold' : 'text-slate-500'}>{pkg.label}</span>
-              <span className={pkg.fits_budget ? 'tabular-nums' : 'tabular-nums text-rose-500'}>{formatMoney(pkg.total, display)}</span>
-            </div>
-          ))}
+        <div className="mt-3 space-y-1.5" role="group" aria-label="Packages">
+          {plan.packages.map((pkg) => {
+            const on = pkg.name === plan.recommended_package
+            return (
+              <button
+                key={pkg.name}
+                onClick={() => !on && choosePackage(pkg.name)}
+                aria-pressed={on}
+                className={clsx(
+                  'flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-sm transition',
+                  on
+                    ? 'border-brand-600 bg-brand-50 font-semibold text-brand-900 dark:border-brand-400 dark:bg-brand-500/15 dark:text-white'
+                    : 'border-slate-200 text-slate-600 hover:border-brand-300 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5',
+                )}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {on && <Check size={14} />} {pkg.label}
+                  {!on && <span className="text-xs font-medium text-brand-700 dark:text-brand-300">· switch</span>}
+                </span>
+                <span className={pkg.fits_budget ? 'tabular-nums' : 'tabular-nums text-rose-500'}>{formatMoney(pkg.total, display)}</span>
+              </button>
+            )
+          })}
         </div>
       </Card>
     </div>

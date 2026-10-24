@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 import re
+import difflib
 from datetime import date, timedelta
 
 from worldtour_ai.config.settings import get_settings
-from worldtour_ai.data.places import find_mentions, lookup_place, normalize
+from worldtour_ai.data.places import find_mentions, lookup_place, normalize, place_aliases
 from worldtour_ai.prompts.parser_prompt import PARSER_SYSTEM_PROMPT
 from worldtour_ai.providers.llm.openrouter_provider import OpenRouterProvider
 from worldtour_ai.schemas.models import TravelRequest
@@ -312,8 +313,66 @@ def _date_in_text(value, lowered: str) -> bool:
     return month_named and bool(re.search(rf"\b0?{parsed.day}(?:st|nd|rd|th)?\b", lowered))
 
 
+_SHORTHAND = [
+    (r"\b(?:frm|fom|frome)\b", "from"),
+    (r"\b(?:frnds?|frndz|frnz|frens)\b", "friends"),
+    (r"\bwe\s+r\b", "we are"),
+    (r"\blong\s+weekend\b", "3 days"),
+    # Other ways of naming where the trip starts.
+    (r"\b(?:flying out of|flying from|departing from|leaving from|starting from|out of|based in|i live in|we live in|we are in|i am in|i'm in|living in)\b", "from"),
+    (r"\b(?:budgt|budjet|bujet|bdgt)\b", "budget"),
+    (r"\b(\d+)\s*(?:d|dy|dys|dayz|din|dino)\b", r"\1 days"),
+    (r"\b(\d+)\s*(?:n|nt|nts|nite|nites|raat|raatein)\b", r"\1 nights"),
+    (r"\b(\d+)\s*(?:ppl|pple|peeps|log|logo|jan|members?|heads?)\b", r"\1 people"),
+    (r"\b(\d+(?:\.\d+)?)\s*(?:l|lk|lac|lacs|lakhs?)\b", r"\1 lakh"),
+    (r"\b(\d+)\s*-\s*(\d+)\s+days\b", r"\2 days"),
+]
+_THOUSAND = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:thousand|thousands|hazaar|hazar|hajar)\b")
+_SE = re.compile(r"\b([a-z]+(?:\s[a-z]+)?)\s+se\b")
+# Ordinary words that look like place names to a fuzzy matcher.
+_NOT_PLACES = {"budget", "beaches", "people", "trip", "friends", "family", "shopping", "within", "around", "mumbai", "nights", "rupees"}
+
+
+def normalize_request_text(text: str) -> str:
+    """Rewrite chat shorthand into words the parser reads: "goa frm mumbai 4day 2ppl 1.5L" →
+    "goa from mumbai 4 days 2 people 1.5 lakh"; Hindi "delhi se" → "from delhi"; misspelt places are corrected."""
+    out = " ".join(text.split())
+    for pattern, repl in _SHORTHAND:
+        out = re.sub(pattern, repl, out, flags=re.IGNORECASE)
+    out = _THOUSAND.sub(lambda m: f"{float(m.group(1)) * 1000:g}", out)
+
+    def from_place(match: re.Match) -> str:
+        words = match.group(1)
+        last = words.split()[-1]
+        place = lookup_place(words) or lookup_place(last)
+        if not place:
+            return match.group(0)
+        prefix = words[: -len(last)] if not lookup_place(words) else ""
+        # "mumbai se goa" is "from mumbai to goa" when a place follows.
+        following = match.string[match.end():].split()[:1]
+        joiner = " to" if following and lookup_place(following[0].strip(" ,.")) else ""
+        return f"{prefix}from {words[len(prefix):]}{joiner}"
+
+    out = _SE.sub(from_place, out)
+    return _fix_place_typos(out)
+
+
+def _fix_place_typos(text: str) -> str:
+    known = set(place_aliases())
+    fixed = []
+    for token in re.split(r"(\W+)", text):
+        word = token.lower()
+        if len(word) >= 5 and word.isalpha() and word not in known and word not in _NOT_PLACES:
+            close = difflib.get_close_matches(word, known, n=1, cutoff=0.8)
+            # Same first letter and nearly the same length: "manaali" → manali, but "parties" is not "paris".
+            if close and close[0][0] == word[0] and " " not in close[0] and abs(len(close[0]) - len(word)) <= 1:
+                token = close[0]
+        fixed.append(token)
+    return "".join(fixed)
+
+
 def _heuristic(text: str, pending: list[str]) -> dict:
-    raw = " ".join(text.split())
+    raw = normalize_request_text(text)
     lowered = raw.lower()
     mentions = find_mentions(raw)
     data: dict = {
@@ -388,6 +447,19 @@ def _extract_route_phrase(raw: str, mentions, data: dict) -> None:
     if from_match:
         origin = _place_in_span(from_match.group(1))
         before = [place for start, _end, place in mentions if start < from_match.start()]
+        after = [place for start, _e, place in mentions if start > from_match.start() and place.name != (origin.name if origin else "")]
+        if origin and not before and after:
+            # "I live in Pune, want 3 days in Goa": the start comes first, the destination later.
+            data["origin"] = origin.name
+            data["destination"] = after[0].name
+            if after[0].kind == "region" and after[0].suggested_cities and not data["cities"]:
+                data["cities"] = list(after[0].suggested_cities)
+                data["cities_are_suggestions"] = True
+            return
+        if origin and not before and len({place.name for _s, _e, place in mentions}) == 1:
+            # "4 friends from Pune, beach, long weekend": the only place named is where they start.
+            data["origin"] = origin.name
+            return
         if origin and before and before[0].name != origin.name:
             destination = before[0]
             data["origin"] = origin.name
@@ -463,7 +535,12 @@ def _extract_duration(lowered: str, data: dict) -> None:
 
 def _extract_budget(lowered: str, data: dict) -> None:
     each = bool(re.search(r"\b(each|per person|apiece|pp)\b", lowered))
-    match = next((item for item in _BUDGET_PATTERN.finditer(lowered) if _budget_context(lowered, item)), None)
+    candidates = [item for item in _BUDGET_PATTERN.finditer(lowered) if _budget_context(lowered, item)]
+    # An amount carrying its own currency or unit ("50000 rupees", "40k") beats a bare number near the word
+    # "budget" ("family of 4, 50000 rupees" must not read as 4).
+    match = next((item for item in candidates if item.group(1) or item.group(3) or item.group(4)), None) or (candidates[0] if candidates else None)
+    if not match:
+        match = _bare_amount(lowered)
     if match:
         multiplier = match.group(3) or ""
         amount = float(match.group(2).replace(",", "")) * _MULTIPLIER.get(multiplier, 1)
@@ -487,6 +564,21 @@ def _extract_budget(lowered: str, data: dict) -> None:
         data["parser_notes"].append("A moderate budget was mentioned without an amount.")
     if re.search(r"\bluxury\b", lowered):
         data["trip_type"] = "luxury"
+
+
+def _bare_amount(lowered: str) -> re.Match | None:
+    """A lone number of 1,000 or more is the budget ("jaipur 3 days 2 people 25000"), unless it is a year
+    or carries a unit such as days, km or people."""
+    for item in _BUDGET_PATTERN.finditer(lowered):
+        digits = item.group(2).replace(",", "")
+        if not digits.replace(".", "").isdigit() or float(digits) < 1000:
+            continue
+        if re.fullmatch(r"(19|20)\d\d", digits):
+            continue
+        if _NOT_MONEY_AFTER.match(lowered[item.end(2) : item.end(2) + 24]):
+            continue
+        return item
+    return None
 
 
 def _budget_context(lowered: str, match: re.Match) -> bool:
@@ -514,6 +606,11 @@ def _extract_travelers(lowered: str, data: dict) -> None:
     if found:
         data["travelers"] = _number_token(found.group(1))
         return
+    # "for 3 friends" names the whole group; "me and 3 friends" adds the speaker (below).
+    named = re.search(r"\bfor\s+(\d+|two|three|four|five|six)\s+(?:friends|buddies|colleagues)\b", lowered)
+    if named:
+        data["travelers"] = _number_token(named.group(1))
+        return
     friends = re.search(r"\b(?:with|and)\s+(\d+|two|three|four|five)\s+friends?\b", lowered)
     if friends:
         data["travelers"] = _number_token(friends.group(1)) + 1
@@ -521,7 +618,7 @@ def _extract_travelers(lowered: str, data: dict) -> None:
         return
     if re.search(r"\b(solo|alone|just me)\b", lowered):
         data["travelers"] = 1
-    elif re.search(r"\b(my wife|my husband|my partner|couple)\b", lowered):
+    elif re.search(r"\b(my wife|my husband|my partner|my (?:gf|bf|girlfriend|boyfriend|fiancee?|fiancée?|spouse)|couple|honeymoon)\b", lowered):
         data["travelers"] = 2
         data["parser_notes"].append("Interpreted a couple as 2 travelers.")
     if "family" in lowered:

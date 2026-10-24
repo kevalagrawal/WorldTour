@@ -40,7 +40,9 @@ def intake_missing(request: TravelRequest, first_round: bool = False) -> list[st
     missing = missing_essential(request)
     if not request.travelers and "travelers" not in missing:
         missing.append("travelers")
-    if first_round:
+    # Dates and interests are optional: they are asked only together with a real gap, never on their own,
+    # so a complete request goes straight to planning (flexible dates, a balanced mix of sights).
+    if first_round and missing:
         if not request.start_date:
             missing.append("start_date")
         if not request.preferences and not request.pace:
