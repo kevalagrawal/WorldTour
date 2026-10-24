@@ -50,3 +50,7 @@ export function createApp({ identity = clerkIdentity(), photos = cloudinaryPhoto
   app.use(errorHandler)
   return app
 }
+
+// Vercel's Express support picks up this file (or src/server.js) by name and expects the app as the
+// default export, so every entry it might choose serves the same app.
+export default createApp()
