@@ -83,8 +83,9 @@ export function ClerkBridge({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { user } = useUser()
   const value = useMemo<Session>(
-    () => ({ enabled: true, loaded: isLoaded, signedIn: !!isSignedIn, clerkImage: user?.imageUrl ?? '', getToken: () => getToken() }),
-    [isLoaded, isSignedIn, getToken, user?.imageUrl],
+    // Clerk's generic placeholder is not a photo: only a real one (e.g. from Google) is used.
+    () => ({ enabled: true, loaded: isLoaded, signedIn: !!isSignedIn, clerkImage: user?.hasImage ? user.imageUrl : '', getToken: () => getToken() }),
+    [isLoaded, isSignedIn, getToken, user?.hasImage, user?.imageUrl],
   )
   useEffect(() => {
     tokenSource = () => getToken()

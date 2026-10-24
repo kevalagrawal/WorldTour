@@ -11,7 +11,7 @@ import { useStore } from '../store'
 export function Avatar({ size = 36, className }: { size?: number; className?: string }) {
   const profile = useAccount((s) => s.profile)
   const { clerkImage } = useSession()
-  const url = profile?.photoUrl || (clerkImage && !clerkImage.includes('default') ? clerkImage : '')
+  const url = profile?.photoUrl || clerkImage
   return url ? (
     <img src={url} alt="" width={size} height={size} className={clsx('shrink-0 rounded-full object-cover ring-2 ring-white dark:ring-ink-800', className)} style={{ width: size, height: size }} />
   ) : (
