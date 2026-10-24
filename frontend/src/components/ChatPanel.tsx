@@ -1,20 +1,23 @@
 import clsx from 'clsx'
-import { AlertTriangle, CalendarDays, Check, RefreshCw, Sparkles, WifiOff, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, Check, RefreshCw, Sparkles, Volume2, VolumeX, WifiOff, X } from 'lucide-react'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useActivePlan, useStore } from '../store'
 import { Composer } from './Composer'
 import { DatePicker } from './DatePicker'
 import { MessageContent } from './MessageContent'
+import { LANGUAGES, packageLabel, speechCode, t, WELCOMES, type Lang } from '../lib/i18n'
 import { useProgress } from '../lib/progress'
+import { hasVoice, speak, stopSpeaking, useVoicesReady } from '../lib/voice'
 
-const MORE = [
-  { label: 'More relaxed', send: 'more relaxed' },
-  { label: 'More activities', send: 'more activities' },
-]
-const FEASIBILITY = [
-  { label: 'Yes, apply suggestions', send: 'yes' },
-  { label: 'Continue as is', send: 'continue' },
-]
+const READ_ALOUD_KEY = 'wt-read-aloud'
+
+function savedReadAloud(): boolean {
+  try {
+    return localStorage.getItem(READ_ALOUD_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 function time(at?: string) {
   if (!at) return ''
@@ -45,7 +48,11 @@ function AssistantAvatar({ small = false }: { small?: boolean }) {
 }
 
 export function ChatPanel() {
-  const { messages, status, error, notice, send, retry, dismissError, plan, session } = useStore()
+  const { messages, status, error, notice, send, retry, dismissError, plan, session, language, setLanguage } = useStore()
+  const lang = language ?? 'en'
+  const say = (key: Parameters<typeof t>[1], values?: Record<string, string | number>) => t(lang, key, values)
+  // A saved welcome in any language is shown in the chosen one.
+  const shown = (content: string) => (WELCOMES.has(content) ? say('welcome') : content)
   const listRef = useRef<HTMLDivElement>(null)
   const busy = status !== 'idle'
   const online = useOnline()
@@ -60,14 +67,47 @@ export function ChatPanel() {
   const afterPlan = active
     ? [
         // All three packages; the current one is ticked.
-        ...active.packages.map((p) => ({ label: p.label, send: p.name, on: p.name === active.recommended_package })),
-        ...(active.transport_choice?.kind !== 'flight' && active.selected_flights.some((f) => f.price != null) ? [{ label: 'By flight', send: 'by flight' }] : []),
-        ...(active.transport_choice?.kind !== 'train' && active.ground_options.some((o) => o.kind === 'train') ? [{ label: 'By train', send: 'by train' }] : []),
-        ...MORE,
+        ...active.packages.map((p) => ({ label: packageLabel(lang, p.name), send: p.name, on: p.name === active.recommended_package })),
+        ...(active.transport_choice?.kind !== 'flight' && active.selected_flights.some((f) => f.price != null) ? [{ label: say('byFlight'), send: 'by flight' }] : []),
+        ...(active.transport_choice?.kind !== 'train' && active.ground_options.some((o) => o.kind === 'train') ? [{ label: say('byTrain'), send: 'by train' }] : []),
+        { label: say('moreRelaxed'), send: 'more relaxed' },
+        { label: say('moreActivities'), send: 'more activities' },
       ]
     : []
-  const quick = busy ? [] : session?.stage === 'feasibility' ? FEASIBILITY : plan && session?.stage === 'planned' ? afterPlan : []
-  const daysChip = plan?.duration.days && session?.stage === 'planned' && !busy ? [{ label: `${plan.duration.days + 1} days`, send: `${plan.duration.days + 1} days` }] : []
+  const feasibility = [
+    { label: say('yesApply'), send: 'yes' },
+    { label: say('continueAsIs'), send: 'continue' },
+  ]
+  const quick = busy ? [] : session?.stage === 'feasibility' ? feasibility : plan && session?.stage === 'planned' ? afterPlan : []
+  const daysChip =
+    plan?.duration.days && session?.stage === 'planned' && !busy ? [{ label: say('days', { n: plan.duration.days + 1 }), send: `${plan.duration.days + 1} days` }] : []
+
+  // Reading replies aloud: each new assistant message is spoken in the chosen language.
+  const voicesReady = useVoicesReady()
+  const [readAloud, setReadAloud] = useState(savedReadAloud)
+  const spokenCount = useRef(messages.length)
+  useEffect(() => {
+    const last = messages.at(-1)
+    if (readAloud && messages.length > spokenCount.current && last?.role === 'assistant') speak(shown(last.content), speechCode(lang))
+    spokenCount.current = messages.length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, readAloud])
+  const toggleReadAloud = () => {
+    const next = !readAloud
+    setReadAloud(next)
+    try {
+      localStorage.setItem(READ_ALOUD_KEY, next ? '1' : '0')
+    } catch {
+      /* the setting still applies for this visit */
+    }
+    if (next) {
+      const last = messages.at(-1)
+      if (last?.role === 'assistant') speak(shown(last.content), speechCode(lang))
+    } else {
+      stopSpeaking()
+    }
+  }
+  const missingVoice = readAloud && voicesReady > 0 && lang !== 'en' && !hasVoice(speechCode(lang))
   const progress = useProgress()
   // The calendar opens by itself when the assistant asks for dates; after a plan it is one tap away.
   const askingDates = !busy && session?.stage === 'collecting' && Array.isArray(session.pending) && (session.pending as string[]).includes('start_date')
@@ -84,21 +124,49 @@ export function ChatPanel() {
       <div className="flex items-center gap-3 border-b border-slate-200/80 px-4 py-3 dark:border-white/10">
         <AssistantAvatar />
         <div className="min-w-0 flex-1">
-          <div className="font-display text-sm font-bold text-slate-900 dark:text-white">Travel assistant</div>
+          <div className="font-display text-sm font-bold text-slate-900 dark:text-white">{say('assistant')}</div>
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
             <span className={clsx('h-1.5 w-1.5 rounded-full', !online ? 'bg-rose-500' : busy ? 'animate-pulse bg-amber-400' : 'bg-emerald-500')} />
-            {!online
-              ? busy
-                ? "You're offline — we'll carry on when you're back"
-                : "You're offline"
-              : status === 'planning'
-                ? 'Building your plan…'
-                : status === 'thinking'
-                  ? 'Typing…'
-                  : 'Online · replies in seconds'}
+            {!online ? (busy ? say('offlineBusy') : say('offline')) : status === 'planning' ? say('building') : status === 'thinking' ? say('typing') : say('online')}
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <label className="sr-only" htmlFor="chat-language">{say('language')}</label>
+          <select
+            id="chat-language"
+            value={lang}
+            onChange={(event) => {
+              stopSpeaking()
+              setLanguage(event.target.value as Lang)
+            }}
+            title={say('language')}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-semibold text-slate-700 outline-none transition hover:border-brand-300 focus:border-brand-500 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200"
+          >
+            {LANGUAGES.map((item) => (
+              <option key={item.code} value={item.code}>{item.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={toggleReadAloud}
+            aria-pressed={readAloud}
+            aria-label={readAloud ? say('stopReading') : say('readAloud')}
+            title={readAloud ? say('stopReading') : say('readAloud')}
+            className={clsx(
+              'grid h-8 w-8 place-items-center rounded-lg border transition',
+              readAloud
+                ? 'border-brand-600 bg-brand-50 text-brand-800 dark:border-brand-400 dark:bg-brand-500/20 dark:text-white'
+                : 'border-slate-200 text-slate-500 hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:text-slate-300',
+            )}
+          >
+            {readAloud ? <Volume2 size={15} /> : <VolumeX size={15} />}
+          </button>
+        </div>
       </div>
+      {missingVoice && (
+        <div className="border-b border-amber-100 bg-amber-50 px-4 py-1.5 text-[11px] text-amber-800 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200">
+          {say('noVoice', { lang: LANGUAGES.find((l) => l.code === lang)?.label ?? lang })}
+        </div>
+      )}
 
       <div ref={listRef} className="scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-5" aria-live="polite">
         {messages.map((message, index) => {
@@ -117,7 +185,7 @@ export function ChatPanel() {
                 </div>
                 {message.failed ? (
                   <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 dark:text-rose-300">
-                    <AlertTriangle size={11} /> Not sent
+                    <AlertTriangle size={11} /> {say('notSent')}
                   </span>
                 ) : (
                   time(message.at) && <span className="mt-1 text-[11px] text-slate-400">{time(message.at)}</span>
@@ -130,7 +198,7 @@ export function ChatPanel() {
               <div className="w-7 shrink-0">{!grouped && <AssistantAvatar small />}</div>
               <div className="min-w-0 max-w-[88%]">
                 <div className="rounded-2xl rounded-tl-md border border-slate-200/80 bg-slate-50 px-4 py-3 text-[15px] leading-relaxed text-slate-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-100">
-                  <MessageContent text={message.content} />
+                  <MessageContent text={shown(message.content)} />
                 </div>
                 {time(message.at) && <span className="mt-1 block text-[11px] text-slate-400">{time(message.at)}</span>}
               </div>
@@ -154,13 +222,13 @@ export function ChatPanel() {
             <AssistantAvatar small />
             <div className="w-full max-w-[88%] rounded-2xl rounded-tl-md border border-brand-200 bg-brand-50/70 px-4 py-3 dark:border-brand-400/30 dark:bg-brand-500/10">
               <div className="flex items-center justify-between text-sm font-semibold text-brand-800 dark:text-brand-200">
-                <span>Planning your trip</span>
-                <span className="text-xs font-medium">{progress.finished} of {progress.total} steps</span>
+                <span>{say('planningTitle')}</span>
+                <span className="text-xs font-medium">{say('steps', { done: progress.finished, total: progress.total })}</span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-brand-100 dark:bg-white/10">
                 <div className="h-full rounded-full bg-brand-600 transition-all duration-500" style={{ width: `${Math.max(5, (progress.finished / Math.max(progress.total, 1)) * 100)}%` }} />
               </div>
-              <p className="mt-2 text-xs text-brand-700/80 dark:text-brand-200/80">{notice ?? 'Comparing transport, hotels, weather and places — usually under a minute.'}</p>
+              <p className="mt-2 text-xs text-brand-700/80 dark:text-brand-200/80">{notice ?? say('planningNote')}</p>
             </div>
           </div>
         )}
@@ -181,7 +249,7 @@ export function ChatPanel() {
                   onClick={() => void retry()}
                   className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
                 >
-                  {unsent ? <WifiOff size={13} /> : <RefreshCw size={13} />} {unsent ? 'Send again' : 'Try planning again'}
+                  {unsent ? <WifiOff size={13} /> : <RefreshCw size={13} />} {unsent ? say('sendAgain') : say('planAgain')}
                 </button>
               )}
             </div>
@@ -193,6 +261,7 @@ export function ChatPanel() {
         <div className="px-3 pb-2.5">
           <DatePicker
             mode={askingDates ? 'ask' : 'change'}
+            lang={lang}
             busy={busy}
             onSend={sendDates}
             onClose={() => setCalendar({ open: false, at: askedAt })}
@@ -207,15 +276,15 @@ export function ChatPanel() {
               onClick={() => setCalendar({ open: true, at: askedAt })}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3.5 py-1.5 text-xs font-semibold text-brand-800 shadow-sm transition hover:bg-brand-100 dark:border-brand-400/40 dark:bg-brand-500/15 dark:text-brand-100"
             >
-              <CalendarDays size={13} /> Pick dates
+              <CalendarDays size={13} /> {say('pickDates')}
             </button>
           )}
           {askingDates && (
             <button
-              onClick={() => sendDates('flexible')}
+              onClick={() => { setCalendar({ open: false, at: askedAt }); void send('flexible', say('flexible')) }}
               className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
-              I'm flexible
+              {say('flexible')}
             </button>
           )}
           {plan && session?.stage === 'planned' && !busy && (
@@ -224,7 +293,7 @@ export function ChatPanel() {
               aria-expanded={calendarOpen}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
-              <CalendarDays size={13} /> Change dates
+              <CalendarDays size={13} /> {say('changeDates')}
             </button>
           )}
           {[...quick, ...daysChip].map((chip) => {
@@ -232,7 +301,7 @@ export function ChatPanel() {
             return (
               <button
                 key={chip.label}
-                onClick={() => !on && void send(chip.send)}
+                onClick={() => !on && void send(chip.send, chip.label)}
                 aria-pressed={'on' in chip ? on : undefined}
                 className={clsx(
                   'inline-flex shrink-0 items-center gap-1 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-sm transition',
@@ -252,7 +321,9 @@ export function ChatPanel() {
         <Composer
           onSend={(text) => void send(text)}
           busy={busy}
-          placeholder={plan ? 'Ask for a change, e.g. "by train"' : 'Type your reply…'}
+          placeholder={plan ? say('placeholderPlan') : say('placeholder')}
+          voiceLang={speechCode(lang)}
+          labels={{ hint: say('hint'), speak: say('speak'), listening: say('listening'), micBlocked: say('micBlocked') }}
         />
       </div>
     </div>

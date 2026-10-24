@@ -1,6 +1,7 @@
 import { ArrowRight, BedDouble, CalendarClock, CheckCircle2, CloudSun, Coins, MessagesSquare, Plane, ShieldCheck, Sparkles, TrainFront, Wand2 } from 'lucide-react'
 import { useState } from 'react'
 import { focusTripInput } from '../lib/focus'
+import { LANGUAGES, speechCode, t } from '../lib/i18n'
 import { useWikiImage } from '../lib/images'
 import { useStore } from '../store'
 import { Composer } from './Composer'
@@ -77,6 +78,8 @@ const FEATURES = [
 export function Landing() {
   const send = useStore((s) => s.send)
   const busy = useStore((s) => s.status !== 'idle')
+  const language = useStore((s) => s.language) ?? 'en'
+  const setLanguage = useStore((s) => s.setLanguage)
   const heroPhoto = useWikiImage(['Amer Fort'], 1800)
   const [initialPrompt] = useState(linkedPrompt)
 
@@ -104,7 +107,27 @@ export function Landing() {
             </p>
 
             <div className="mt-8 max-w-xl rounded-2xl bg-white p-3 text-slate-900 shadow-2xl dark:bg-ink-800 dark:text-white">
-              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" initialText={initialPrompt} autoFocus={!!initialPrompt} inputId="trip-input" />
+              <Composer onSend={(text) => void send(text)} busy={busy} size="lg" placeholder="e.g. 5 days in Dubai from Mumbai for 2, budget ₹1.5 lakh" initialText={initialPrompt} autoFocus={!!initialPrompt} inputId="trip-input"
+                voiceLang={speechCode(language)}
+                labels={{ speak: t(language, 'speak'), listening: t(language, 'listening'), micBlocked: t(language, 'micBlocked') }}
+              />
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 px-1" role="group" aria-label="Chat language">
+                <span className="mr-1 text-xs font-medium text-slate-500 dark:text-slate-400">{t(language, 'language')}:</span>
+                {LANGUAGES.map((item) => (
+                  <button
+                    key={item.code}
+                    onClick={() => setLanguage(item.code)}
+                    aria-pressed={language === item.code}
+                    className={
+                      language === item.code
+                        ? 'rounded-full bg-brand-700 px-2.5 py-1 text-xs font-semibold text-white dark:bg-brand-500'
+                        : 'rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 hover:border-brand-300 hover:text-brand-800 dark:border-white/10 dark:text-slate-300'
+                    }
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
               <div className="mt-3 flex flex-wrap gap-2 px-1 pb-1">
                 {PROMPTS.map((prompt) => (
                   <button

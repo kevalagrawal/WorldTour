@@ -87,11 +87,11 @@ export async function health(): Promise<{ status: string; access_code_required: 
   return response.json()
 }
 
-export async function sendChat(session: Session | null, message: string, accessCode: string | null): Promise<ChatResponse> {
+export async function sendChat(session: Session | null, message: string, accessCode: string | null, language = 'en'): Promise<ChatResponse> {
   // The chat step is stateless (the session travels with the request), so retrying is safe.
   const response = await request(
     '/api/chat',
-    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message }) },
+    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message, language }) },
     { retries: 2, timeoutMs: 30000 },
   )
   if (!response.ok) await fail(response)

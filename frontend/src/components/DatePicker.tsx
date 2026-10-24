@@ -1,15 +1,14 @@
 import clsx from 'clsx'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useState } from 'react'
+import { speechCode, t, type Lang } from '../lib/i18n'
 
-const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 const DAY = 24 * 60 * 60 * 1000
 
 const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 const sameDay = (a: Date | null, b: Date | null) => !!a && !!b && a.getTime() === b.getTime()
 /** "12 Dec 2026" — the form the trip parser reads reliably. */
 const forChat = (d: Date) => `${d.getDate()} ${d.toLocaleString('en-GB', { month: 'short' })} ${d.getFullYear()}`
-const pretty = (d: Date) => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 /**
  * A calendar for answering "When do you want to travel?": tap a start date, then (optionally) an end date,
@@ -19,15 +18,21 @@ export function DatePicker({
   onSend,
   busy,
   mode,
+  lang = 'en',
   onClose,
 }: {
   onSend: (text: string) => void
   busy: boolean
   /** "ask": the assistant is asking for dates; "change": the plan exists and the traveler wants new dates. */
   mode: 'ask' | 'change'
+  lang?: Lang
   onClose?: () => void
 }) {
   const today = startOfDay(new Date())
+  // Names of months and weekdays in the chat language; dates sent to the planner stay in English.
+  const locale = speechCode(lang)
+  const pretty = (d: Date) => d.toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' })
+  const weekdays = Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: 'narrow' }))
   const [month, setMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1))
   const [start, setStart] = useState<Date | null>(null)
   const [end, setEnd] = useState<Date | null>(null)
@@ -60,7 +65,7 @@ export function DatePicker({
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-white">
           <CalendarDays size={15} className="text-brand-700 dark:text-brand-300" />
-          {mode === 'change' ? 'Change your travel dates' : 'Pick your travel dates'}
+          {mode === 'change' ? t(lang, 'calendarChange') : t(lang, 'calendarAsk')}
         </div>
         {onClose && (
           <button onClick={onClose} aria-label="Close calendar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10">
@@ -79,7 +84,7 @@ export function DatePicker({
           <ChevronLeft size={16} />
         </button>
         <div className="text-sm font-bold text-slate-900 dark:text-white" aria-live="polite">
-          {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          {month.toLocaleDateString(locale, { month: 'long', year: 'numeric' })}
         </div>
         <button
           onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
@@ -91,7 +96,7 @@ export function DatePicker({
       </div>
 
       <div className="grid grid-cols-7 text-center text-[11px] font-semibold uppercase text-slate-400">
-        {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
+        {weekdays.map((d, i) => <div key={i} className="py-1">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((day, index) => {
@@ -132,20 +137,20 @@ export function DatePicker({
               {end ? (
                 <>
                   {' → '}
-                  <span className="font-semibold text-slate-900 dark:text-white">{pretty(end)}</span> · {days} days
+                  <span className="font-semibold text-slate-900 dark:text-white">{pretty(end)}</span> · {t(lang, 'days', { n: days ?? 0 })}
                 </>
               ) : (
-                <span className="text-slate-400"> · tap a return date (optional)</span>
+                <span className="text-slate-400"> · {t(lang, 'tapReturn')}</span>
               )}
             </>
           ) : (
-            'Tap your start date'
+            t(lang, 'tapStart')
           )}
         </div>
         <div className="flex gap-1.5">
           {start && (
             <button onClick={() => { setStart(null); setEnd(null) }} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-white/10">
-              Clear
+              {t(lang, 'clear')}
             </button>
           )}
           <button
@@ -153,7 +158,7 @@ export function DatePicker({
             disabled={!start || busy}
             className="rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-brand-800 disabled:opacity-40 dark:bg-brand-500 dark:hover:bg-brand-400"
           >
-            Use {end ? 'these dates' : 'this date'}
+            {end ? t(lang, 'useDates') : t(lang, 'useDate')}
           </button>
         </div>
       </div>

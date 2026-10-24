@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     geoapify_api_key: str = ""
     # SerpApi (free plan: 250 searches/month) gives live Google Flights fares and Google Hotels rates for future dates.
     serpapi_api_key: str = ""
+    # Optional contact email for the free MyMemory translation API (raises its daily limit).
+    mymemory_email: str = ""
     osrm_base_url: str = "https://router.project-osrm.org"
 
     flight_provider: str = "aviationstack"

@@ -32,6 +32,7 @@ from pydantic import BaseModel
 
 from worldtour_ai.config.settings import get_settings
 from worldtour_ai.services.chat_session import chat_step
+from worldtour_ai.services.translate import LANGUAGES, from_english, to_english
 from worldtour_ai.services.exporter import file_stem, plan_calendar, plan_text
 from worldtour_ai.workflows.state import fresh_state
 from worldtour_ai.workflows.travel_graph import build_workflow
@@ -76,6 +77,8 @@ def _workflow():
 class ChatBody(BaseModel):
     session: dict | None = None
     message: str
+    # Chat language: en, hi, gu or mr. Replies come back in it; messages in its script are read in English.
+    language: str = "en"
 
 
 class PlanBody(BaseModel):
@@ -146,7 +149,12 @@ def chat(body: ChatBody, request: Request) -> dict:
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Please type a message.")
     try:
-        return chat_step(body.session, body.message[:2000])
+        language = body.language if body.language in LANGUAGES else "en"
+        result = chat_step(body.session, to_english(body.message[:2000], language))
+        if language != "en":
+            result["reply_en"] = result["reply"]
+            result["reply"] = from_english(result["reply"], language)
+        return result
     except Exception as exc:
         logger.exception("chat step failed")
         raise HTTPException(status_code=500, detail="Sorry, I couldn't process that message. Please try rephrasing it.") from exc

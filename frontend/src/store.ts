@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ApiError, runPlan, sendChat } from './lib/api'
+import { packageLabel, t, type Lang } from './lib/i18n'
 import { formatMoney } from './lib/money'
 import { applySelection, initialSelection, packageSelection, type Selection, type TransportPick } from './lib/selection'
 import type { AgentEvent, ChatMessage, Package, Plan, Session, Summary } from './lib/types'
@@ -20,8 +21,12 @@ interface State {
   notice: string | null
   error: string | null
   accessCode: string | null
+  /** Chat language; the assistant replies in it and voice input listens for it. */
+  language: Lang
+  setLanguage: (language: Lang) => void
   needsAccessCode: boolean
-  send: (text: string) => Promise<void>
+  /** shown: what the chat displays when it differs from what is sent (e.g. a translated chip label). */
+  send: (text: string, shown?: string) => Promise<void>
   /** Re-sends the last unanswered message, or restarts planning. */
   retry: () => Promise<void>
   reset: () => void
@@ -84,8 +89,7 @@ export const useStore = create<State>()(
             {
               role: 'assistant',
               at: now(),
-              content:
-                'Your plan is ready! Explore it on the right. To change anything, just tell me — for example "premium", "by train", "more relaxed", "5 days" or "remove <place>".',
+              content: t(get().language, 'planReady'),
             },
           ],
         }))
@@ -109,16 +113,20 @@ export const useStore = create<State>()(
         error: null,
         accessCode: null,
         needsAccessCode: false,
+        language: 'en',
+        setLanguage: (language) => set({ language }),
 
-        send: async (text: string) => {
+        send: async (text: string, shown?: string) => {
           const message = text.trim()
           if (!message || get().status !== 'idle') return
+          const label = shown?.trim() || message
+          const lang = get().language
           const mode = message.match(MODE_REQUEST)?.[1]?.toLowerCase()
           const current = get().plan
           if (mode && current && get().session?.stage === 'planned') {
             const pick = pickForMode(current, mode === 'plane' || mode === 'air' ? 'flight' : mode === 'rail' ? 'train' : mode)
             if (pick) {
-              set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }], error: null }))
+              set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: label, at: now() }], error: null }))
               get().chooseTransport(pick)
               const updated = applySelection(current, get().selection)
               const display = { currency: current.display_currency || 'USD', rate: current.usd_to_display || 1 }
@@ -128,7 +136,7 @@ export const useStore = create<State>()(
                   {
                     role: 'assistant',
                     at: now(),
-                    content: `Done — you'll travel by ${updated.transport_choice?.label ?? mode}. I've updated the arrival and departure days and the costs; the rest of the itinerary is unchanged. New total: ${formatMoney(updated.estimated_cost, display)}.`,
+                    content: t(lang, 'switchedMode', { travel: updated.transport_choice?.label ?? mode, total: formatMoney(updated.estimated_cost, display) }),
                   },
                 ],
               }))
@@ -137,19 +145,19 @@ export const useStore = create<State>()(
           }
           const asked = message.match(PACKAGE_REQUEST)?.[1]?.toLowerCase()
           if (asked && get().plan && get().session?.stage === 'planned') {
-            set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }], error: null }))
+            set((s) => ({ messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: label, at: now() }], error: null }))
             const name = asked === 'luxury' ? 'premium' : asked.startsWith('cheap') ? 'budget' : (asked as Package['name'])
             get().choosePackage(name, true)
             return
           }
           set((s) => ({
             // A message that failed earlier is replaced by this attempt rather than shown twice.
-            messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: message, at: now() }],
+            messages: [...s.messages.filter((m) => !m.failed), { role: 'user', content: label, at: now() }],
             status: 'thinking',
             error: null,
           }))
           try {
-            const response = await sendChat(get().session, message, get().accessCode)
+            const response = await sendChat(get().session, message, get().accessCode, lang)
             set((s) => ({
               messages: [...s.messages, { role: 'assistant', content: response.reply, at: now() }],
               session: response.session,
@@ -207,7 +215,12 @@ export const useStore = create<State>()(
                   {
                     role: 'assistant',
                     at: now(),
-                    content: `Switched to the ${pkg.label} package — ${updated.transport_choice?.label ?? 'travel'} and ${pkg.hotels.map((h) => h.name).join(', ') || 'the hotel'}. Your day-by-day plan stays the same; the new total is ${formatMoney(updated.estimated_cost, { currency: plan.display_currency || 'USD', rate: plan.usd_to_display || 1 })}.`,
+                    content: t(get().language, 'switchedPackage', {
+                      pkg: packageLabel(get().language, name),
+                      travel: updated.transport_choice?.label ?? '—',
+                      hotels: pkg.hotels.map((h) => h.name).join(', ') || '—',
+                      total: formatMoney(updated.estimated_cost, { currency: plan.display_currency || 'USD', rate: plan.usd_to_display || 1 }),
+                    }),
                   },
                 ]
               : s.messages,
@@ -233,7 +246,7 @@ export const useStore = create<State>()(
       version: 2,
       migrate: (state) => state as State,
       // Keep the conversation and plan across reloads, but never resume mid-request.
-      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, selection: s.selection, accessCode: s.accessCode }),
+      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, selection: s.selection, accessCode: s.accessCode, language: s.language }),
     },
   ),
 )
