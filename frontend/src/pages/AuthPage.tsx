@@ -8,6 +8,8 @@ import { useWikiImage } from '../lib/images'
 
 type Mode = 'sign-in' | 'sign-up'
 
+const NEW_ACCOUNT = 'wt-new-account'
+
 /** Clerk's error for a failed call, in plain words. */
 function clerkMessage(error: unknown): string {
   const first = (error as { errors?: { longMessage?: string; message?: string; code?: string }[] })?.errors?.[0]
@@ -42,7 +44,17 @@ export function AuthPage({ mode }: { mode: Mode }) {
       </Shell>
     )
   }
-  if (loaded && signedIn) return <Navigate to={redirect} replace />
+  if (loaded && signedIn) {
+    // A brand-new account goes to the photo step first, whichever redirect fires first after sign-up.
+    let fresh = false
+    try {
+      fresh = sessionStorage.getItem(NEW_ACCOUNT) === '1'
+      sessionStorage.removeItem(NEW_ACCOUNT)
+    } catch {
+      /* ignore */
+    }
+    return <Navigate to={fresh ? `/onboarding/photo${redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''}` : redirect} replace />
+  }
   return <Shell photo={photo}>{mode === 'sign-up' ? <SignUpForm redirect={redirect} /> : <SignInForm redirect={redirect} />}</Shell>
 }
 
@@ -210,6 +222,11 @@ function SignUpForm({ redirect }: { redirect: string }) {
     try {
       const result = await signUp.attemptEmailAddressVerification({ code: code.trim() })
       if (result.status === 'complete') {
+        try {
+          sessionStorage.setItem(NEW_ACCOUNT, '1')
+        } catch {
+          /* the navigate below still goes to the photo step */
+        }
         await setActive({ session: result.createdSessionId })
         navigate(`/onboarding/photo${redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''}`, { replace: true })
       } else {
