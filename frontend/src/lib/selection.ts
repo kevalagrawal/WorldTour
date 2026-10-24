@@ -89,7 +89,10 @@ function sameHotels(a: Record<string, string>, b: Record<string, string>): boole
 
 /** The package whose options match the selection exactly, if any. */
 export function matchingPackage(plan: Plan, selection: Selection): Package['name'] | null {
-  for (const pkg of plan.packages) {
+  // Two packages can share the same travel and hotels (they then differ only in food level):
+  // the one the traveler chose wins.
+  const ordered = [...plan.packages].sort((a, b) => Number(b.name === selection.package) - Number(a.name === selection.package))
+  for (const pkg of ordered) {
     const own = packageSelection(plan, pkg)
     if (sameTransport(own.transport, selection.transport) && sameHotels(own.hotels, selection.hotels)) return pkg.name
   }
