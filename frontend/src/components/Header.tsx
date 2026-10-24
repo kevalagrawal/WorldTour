@@ -1,10 +1,13 @@
 import clsx from 'clsx'
 import { Moon, Plus, RotateCcw, Sun } from 'lucide-react'
 import { useCallback, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ACCOUNTS_ENABLED, useAccount, useSession } from '../lib/account'
 import { focusTripInput } from '../lib/focus'
 import { prettyDate } from '../lib/money'
 import { useStarted, useStore } from '../store'
 import { ConfirmDialog, Logo } from './ui'
+import { UserMenu } from './UserMenu'
 
 function ThemeToggle() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -30,12 +33,25 @@ function ThemeToggle() {
 }
 
 export function Header() {
-  const started = useStarted()
+  const hasConversation = useStarted()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const onHome = location.pathname === '/'
+  // The planner layout (trip pill, wide header) only on the planner page.
+  const started = hasConversation && onHome
+  const { signedIn } = useSession()
+  const accountTheme = ACCOUNTS_ENABLED && signedIn && !!useAccount((s) => s.profile)
   const { reset, status, summary, plan } = useStore()
   const busy = status !== 'idle'
   const [confirming, setConfirming] = useState(false)
   const closeConfirm = useCallback(() => setConfirming(false), [])
-  const askNewTrip = () => started && !busy && setConfirming(true)
+  // New trip: confirm when there is a conversation to clear; otherwise go to an empty planner.
+  const askNewTrip = () => {
+    if (busy) return
+    if (hasConversation) return setConfirming(true)
+    if (!onHome) navigate('/')
+    setTimeout(focusTripInput, 50)
+  }
   const trip = plan
     ? `${plan.destination ?? 'Your trip'}${plan.duration.days ? ` · ${plan.duration.days} days` : ''}`
     : summary?.destination
@@ -52,7 +68,7 @@ export function Header() {
       )}
     >
       <div className={clsx('mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6', started ? 'max-w-[1600px]' : 'max-w-7xl')}>
-        <button onClick={askNewTrip} className="shrink-0" aria-label={started ? 'WorldTour — start a new trip' : 'WorldTour'}>
+        <button onClick={() => (onHome ? started && askNewTrip() : navigate('/'))} className="shrink-0" aria-label={onHome && started ? 'WorldTour — start a new trip' : 'WorldTour home'}>
           <Logo />
         </button>
 
@@ -65,7 +81,7 @@ export function Header() {
           </div>
         )}
 
-        {!started && (
+        {!started && onHome && (
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 md:flex dark:text-slate-300">
             <a href="#destinations" className="hover:text-slate-900 dark:hover:text-white">Destinations</a>
             <a href="#how" className="hover:text-slate-900 dark:hover:text-white">How it works</a>
@@ -74,7 +90,7 @@ export function Header() {
         )}
 
         <div className="flex shrink-0 items-center gap-1.5">
-          {started && (
+          {(hasConversation || !onHome || (ACCOUNTS_ENABLED && signedIn)) && (
             <button
               onClick={askNewTrip}
               disabled={busy}
@@ -83,8 +99,8 @@ export function Header() {
               <Plus size={16} /> <span className="hidden sm:inline">New trip</span>
             </button>
           )}
-          <ThemeToggle />
-          {!started && (
+          {!accountTheme && <ThemeToggle />}
+          {!hasConversation && onHome && !(ACCOUNTS_ENABLED && signedIn) && (
             <a
               href="#plan"
               onClick={(event) => {
@@ -96,6 +112,7 @@ export function Header() {
               Start planning
             </a>
           )}
+          <UserMenu />
         </div>
       </div>
       <ConfirmDialog
@@ -105,11 +122,15 @@ export function Header() {
         body={
           <>
             {plan ? (
-              <>Your plan for <span className="font-semibold text-slate-800 dark:text-white">{plan.destination ?? 'this trip'}</span> and the conversation will be cleared.</>
+              <>Your plan for <span className="font-semibold text-slate-800 dark:text-white">{plan.destination ?? 'this trip'}</span> and the conversation will be cleared from the planner.</>
             ) : (
-              'The conversation so far will be cleared.'
+              'The conversation so far will be cleared from the planner.'
             )}{' '}
-            Tip: download the PDF first if you want to keep it.
+            {ACCOUNTS_ENABLED && signedIn
+              ? 'It stays saved in My trips, so you can open it again any time.'
+              : ACCOUNTS_ENABLED
+                ? 'Tip: sign in to save it to My trips, or download the PDF first.'
+                : 'Tip: download the PDF first if you want to keep it.'}
           </>
         }
         confirmLabel="Start new trip"
@@ -118,7 +139,9 @@ export function Header() {
         onConfirm={() => {
           setConfirming(false)
           reset()
+          if (!onHome) navigate('/')
           window.scrollTo({ top: 0 })
+          setTimeout(focusTripInput, 80)
         }}
       />
     </header>

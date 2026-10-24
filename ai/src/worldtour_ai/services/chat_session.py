@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
+import re
+
 from worldtour_ai.config.settings import get_settings
+from worldtour_ai.data.places import lookup_place, normalize
 from worldtour_ai.schemas.models import TravelRequest
 from worldtour_ai.services.intake import (
     MAX_ROUNDS,
@@ -43,8 +46,12 @@ def new_session() -> dict:
     return {"stage": "collecting", "request": None, "pending": [], "skipped": [], "round": 0, "history": []}
 
 
-def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
-    """Advance the conversation by one user message. Returns {session, reply, ready, changes}."""
+def chat_step(session: dict | None, message: str, use_llm: bool = True, defaults: dict | None = None) -> dict:
+    """Advance the conversation by one user message. Returns {session, reply, ready, changes}.
+
+    defaults: a signed-in traveler's saved settings, {"home_city": ..., "currency": ...}. The home city
+    is the starting point when the first message names none; the currency is used for display.
+    """
     session = dict(session or new_session())
     text = (message or "").strip()
     history = list(session.get("history") or [])
@@ -73,6 +80,7 @@ def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
     # when an essential detail is still missing (it is slow, but cheaper for the traveler than a question).
     if session.get("request") is None:
         request = parse_travel_text(text or "trip", use_llm=False)
+        request = _apply_defaults(request, defaults or {})
         if use_llm and _ai_might_help(request, text):
             data = request.model_dump()
             merge_grounded(data, _llm_fields_within_limit(text))
@@ -99,6 +107,18 @@ def chat_step(session: dict | None, message: str, use_llm: bool = True) -> dict:
     trim_suggested_cities(data)
     session.update(request=data, pending=[])
     return _check_feasibility(session, history, changes, round_number=0)
+
+
+def _apply_defaults(request: TravelRequest, defaults: dict) -> TravelRequest:
+    data = request.model_dump()
+    home = lookup_place(defaults.get("home_city")) if defaults.get("home_city") else None
+    if home and not data.get("origin") and normalize(home.name) != normalize(str(data.get("destination") or "")):
+        data["origin"] = home.name
+        data["parser_notes"] = [*(data.get("parser_notes") or []), f"Starting from {home.name}, your home city in Settings."]
+    currency = str(defaults.get("currency") or "").upper()
+    if re.fullmatch(r"[A-Z]{3}", currency):
+        data["preferred_currency"] = currency
+    return TravelRequest.model_validate(data)
 
 
 def _essentials_missing(request: TravelRequest) -> list[str]:

@@ -28,6 +28,8 @@ def display_currency(request: dict) -> str:
     """The currency the user wrote in; otherwise the currency of the country they travel from."""
     if request.get("currency") and not request.get("currency_assumed"):
         return str(request["currency"]).upper()
+    if request.get("preferred_currency"):
+        return str(request["preferred_currency"]).upper()
     origin = lookup_place(request.get("origin"))
     return COUNTRY_CURRENCY.get(origin.country if origin else "", request.get("currency") or "USD")
 

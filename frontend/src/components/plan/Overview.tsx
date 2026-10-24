@@ -5,7 +5,7 @@ import { clockFromIso, duration, formatMoney, prettyDate, type Display } from '.
 import { flightFare, groundOneWay, pricingOf } from '../../lib/selection'
 import type { Flight, GroundOption, Hotel, Plan } from '../../lib/types'
 import { weatherEmoji } from '../../lib/weather'
-import { useStore } from '../../store'
+import { usePlanAction, usePlanReadOnly } from './readOnly'
 import { Badge, Card, ExternalLink, SectionTitle } from '../ui'
 
 export function Overview({ plan, display }: { plan: Plan; display: Display }) {
@@ -56,7 +56,8 @@ const choiceCard = (on: boolean, disabled = false) =>
   )
 
 function Packages({ plan, display }: { plan: Plan; display: Display }) {
-  const choosePackage = useStore((s) => s.choosePackage)
+  const choosePackage = usePlanAction('choosePackage')
+  const readOnly = usePlanReadOnly()
   if (!plan.packages.length) return null
   return (
     <Card className="p-4 sm:p-5">
@@ -96,7 +97,7 @@ function Packages({ plan, display }: { plan: Plan; display: Display }) {
                   on ? 'bg-brand-700 text-white dark:bg-brand-500' : 'border border-brand-600 text-brand-700 dark:border-brand-400 dark:text-brand-200',
                 )}
               >
-                {on ? 'Your package' : `Choose ${pkg.label}`}
+                {on ? (readOnly ? 'Chosen package' : 'Your package') : readOnly ? pkg.label : `Choose ${pkg.label}`}
               </span>
             </button>
           )
@@ -114,7 +115,7 @@ function ModeIcon({ kind, className = 'mt-0.5 shrink-0 text-slate-400', size = 1
 }
 
 function GettingThere({ plan, display }: { plan: Plan; display: Display }) {
-  const chooseTransport = useStore((s) => s.chooseTransport)
+  const chooseTransport = usePlanAction('chooseTransport')
   const choice = plan.transport_choice
   const flights = plan.selected_flights
   const ground = plan.ground_options
@@ -319,7 +320,7 @@ function FlightList({
 }
 
 function Hotels({ plan, display }: { plan: Plan; display: Display }) {
-  const chooseHotel = useStore((s) => s.chooseHotel)
+  const chooseHotel = usePlanAction('chooseHotel')
   if (!plan.selected_hotels.length) return null
   const pricing = pricingOf(plan)
   const chosen = new Set(plan.recommended_hotel_ids)

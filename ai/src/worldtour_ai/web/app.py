@@ -79,6 +79,9 @@ class ChatBody(BaseModel):
     message: str
     # Chat language: en, hi, gu or mr. Replies come back in it; messages in its script are read in English.
     language: str = "en"
+    # A signed-in traveler's saved settings: home city (start point) and display currency.
+    home_city: str | None = None
+    currency: str | None = None
 
 
 class PlanBody(BaseModel):
@@ -150,7 +153,8 @@ def chat(body: ChatBody, request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Please type a message.")
     try:
         language = body.language if body.language in LANGUAGES else "en"
-        result = chat_step(body.session, to_english(body.message[:2000], language))
+        defaults = {"home_city": (body.home_city or "")[:80], "currency": (body.currency or "")[:3]}
+        result = chat_step(body.session, to_english(body.message[:2000], language), defaults=defaults)
         if language != "en":
             result["reply_en"] = result["reply"]
             result["reply"] = from_english(result["reply"], language)

@@ -87,11 +87,17 @@ export async function health(): Promise<{ status: string; access_code_required: 
   return response.json()
 }
 
+/** A signed-in traveler's saved home city and currency, sent with chat messages as defaults. */
+let chatDefaults: { home_city?: string; currency?: string } = {}
+export function setChatDefaults(defaults: { home_city?: string; currency?: string }) {
+  chatDefaults = defaults
+}
+
 export async function sendChat(session: Session | null, message: string, accessCode: string | null, language = 'en'): Promise<ChatResponse> {
   // The chat step is stateless (the session travels with the request), so retrying is safe.
   const response = await request(
     '/api/chat',
-    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message, language }) },
+    { method: 'POST', headers: headers(accessCode), body: JSON.stringify({ session, message, language, ...chatDefaults }) },
     { retries: 2, timeoutMs: 30000 },
   )
   if (!response.ok) await fail(response)

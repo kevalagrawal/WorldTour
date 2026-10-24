@@ -89,6 +89,7 @@ export function ConfirmDialog({
   icon,
   onConfirm,
   onCancel,
+  focusConfirm = true,
 }: {
   open: boolean
   title: string
@@ -99,12 +100,14 @@ export function ConfirmDialog({
   icon?: ReactNode
   onConfirm: () => void
   onCancel: () => void
+  /** Off when the body has its own field to type in. */
+  focusConfirm?: boolean
 }) {
   const confirmRef = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (!open) return
     const previous = document.activeElement as HTMLElement | null
-    confirmRef.current?.focus()
+    if (focusConfirm) confirmRef.current?.focus()
     const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onCancel()
     document.addEventListener('keydown', onKey)
     const overflow = document.body.style.overflow
@@ -114,7 +117,7 @@ export function ConfirmDialog({
       document.body.style.overflow = overflow
       previous?.focus?.()
     }
-  }, [open, onCancel])
+  }, [open, onCancel, focusConfirm])
   if (!open) return null
   return createPortal(
     <div className="fixed inset-0 z-[3000] flex items-end justify-center p-4 sm:items-center" role="presentation">

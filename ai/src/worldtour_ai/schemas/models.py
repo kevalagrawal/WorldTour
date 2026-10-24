@@ -38,6 +38,8 @@ class TravelRequest(BaseModel):
     cities_are_suggestions: bool = False
     parser_notes: list[str] = Field(default_factory=list)
     parser_mode: str | None = None
+    # A signed-in traveler's saved display currency (Settings); the currency they write still wins.
+    preferred_currency: str | None = None
 
 
 class FlightOption(BaseModel):

@@ -6,6 +6,7 @@ import { useWikiImage } from '../../lib/images'
 import { formatLocal, formatMoney, prettyDate, type Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
 import { useStore } from '../../store'
+import { usePlanAction, usePlanReadOnly } from './readOnly'
 import { Stat } from '../ui'
 import { BookExport } from './BookExport'
 import { Costs } from './Costs'
@@ -26,8 +27,9 @@ export function PlanView({ plan }: { plan: Plan }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [copied, setCopied] = useState(false)
   const [printing, setPrinting] = useState(false)
-  const customised = useStore((s) => s.selection !== null)
-  const resetSelection = useStore((s) => s.resetSelection)
+  const readOnly = usePlanReadOnly()
+  const customised = useStore((s) => s.selection !== null) && !readOnly
+  const resetSelection = usePlanAction('resetSelection')
   const display: Display = { currency: plan.display_currency || 'USD', rate: plan.usd_to_display || 1 }
   const chosen = plan.packages.find((p) => p.name === plan.recommended_package)
   const budget = plan.budget

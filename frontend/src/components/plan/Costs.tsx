@@ -3,14 +3,15 @@ import { Check, PieChart as PieIcon } from 'lucide-react'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { fillMoney, formatMoney, type Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
-import { useStore } from '../../store'
+import { usePlanAction, usePlanReadOnly } from './readOnly'
 import { Card, SectionTitle } from '../ui'
 
 const COLORS = ['#1d5ef1', '#0d9488', '#f59e0b', '#8b5cf6', '#ef4444', '#64748b']
 
 export function Costs({ plan, display }: { plan: Plan; display: Display }) {
   const rows = plan.budget_breakdown
-  const choosePackage = useStore((s) => s.choosePackage)
+  const choosePackage = usePlanAction('choosePackage')
+  const readOnly = usePlanReadOnly()
   const data = rows.filter((row) => row.cost > 0).map((row) => ({ name: row.category, value: row.cost }))
   const budget = plan.budget.planning_budget
   const used = budget ? Math.min(100, (plan.estimated_cost / budget) * 100) : null
@@ -91,7 +92,7 @@ export function Costs({ plan, display }: { plan: Plan; display: Display }) {
               >
                 <span className="inline-flex items-center gap-1.5">
                   {on && <Check size={14} />} {pkg.label}
-                  {!on && <span className="text-xs font-medium text-brand-700 dark:text-brand-300">· switch</span>}
+                  {!on && !readOnly && <span className="text-xs font-medium text-brand-700 dark:text-brand-300">· switch</span>}
                 </span>
                 <span className={pkg.fits_budget ? 'tabular-nums' : 'tabular-nums text-rose-500'}>{formatMoney(pkg.total, display)}</span>
               </button>

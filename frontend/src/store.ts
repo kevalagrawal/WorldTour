@@ -21,6 +21,11 @@ interface State {
   notice: string | null
   error: string | null
   accessCode: string | null
+  /** The saved trip (server) this conversation belongs to; null until it is saved. */
+  tripId: string | null
+  setTripId: (id: string | null) => void
+  /** Open a saved trip in the planner to continue it. */
+  loadTrip: (trip: { id: string; messages: ChatMessage[]; session: Session | null; plan: Plan | null; selection: Selection | null }) => void
   /** Chat language; the assistant replies in it and voice input listens for it. */
   language: Lang
   setLanguage: (language: Lang) => void
@@ -115,6 +120,21 @@ export const useStore = create<State>()(
         needsAccessCode: false,
         language: 'en',
         setLanguage: (language) => set({ language }),
+        tripId: null,
+        setTripId: (tripId) => set({ tripId }),
+        loadTrip: (trip) =>
+          set({
+            tripId: trip.id,
+            messages: trip.messages.length ? trip.messages : [WELCOME],
+            session: trip.session,
+            plan: trip.plan,
+            selection: trip.selection,
+            summary: null,
+            events: [],
+            status: 'idle',
+            error: null,
+            notice: null,
+          }),
 
         send: async (text: string, shown?: string) => {
           const message = text.trim()
@@ -194,7 +214,7 @@ export const useStore = create<State>()(
         },
 
         reset: () =>
-          set({ messages: [WELCOME], session: null, summary: null, plan: null, selection: null, events: [], status: 'idle', error: null, notice: null }),
+          set({ messages: [WELCOME], session: null, summary: null, plan: null, selection: null, tripId: null, events: [], status: 'idle', error: null, notice: null }),
         setAccessCode: (code) => set({ accessCode: code.trim() || null, needsAccessCode: false, error: null }),
         setNeedsAccessCode: (value) => set({ needsAccessCode: value }),
         dismissError: () => set({ error: null }),
@@ -246,7 +266,7 @@ export const useStore = create<State>()(
       version: 2,
       migrate: (state) => state as State,
       // Keep the conversation and plan across reloads, but never resume mid-request.
-      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, selection: s.selection, accessCode: s.accessCode, language: s.language }),
+      partialize: (s) => ({ messages: s.messages, session: s.session, summary: s.summary, plan: s.plan, selection: s.selection, accessCode: s.accessCode, language: s.language, tripId: s.tripId }),
     },
   ),
 )
