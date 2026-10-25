@@ -37,7 +37,7 @@ export function SettingsPage() {
   return (
     <Page wide title="Settings" subtitle="Manage your details, preferences and sign-in.">
       <div className="grid gap-5 md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
-        <div className="space-y-4 md:sticky md:top-24 md:self-start">
+        <div className="min-w-0 space-y-4 md:sticky md:top-24 md:self-start">
           <div className="hidden animate-fade-up items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-soft md:flex dark:border-white/10 dark:bg-ink-800">
             <Avatar size={44} />
             <div className="min-w-0">
