@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import { CalendarDays, Check, Copy, FileDown, LayoutDashboard, ListChecks, Luggage, PieChart, PiggyBank, RotateCcw, Share2, SlidersHorizontal, Users, Wallet } from 'lucide-react'
 import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { useSession } from '../../lib/account'
-import { exportText } from '../../lib/api'
+import { planOutline } from '../../lib/calendar'
 import { useWikiImage } from '../../lib/images'
 import { formatLocal, formatMoney, prettyDate, type Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
@@ -18,10 +18,10 @@ import { Overview } from './Overview'
 const PrintDocument = lazy(() => import('./PrintDocument').then((m) => ({ default: m.PrintDocument })))
 
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={16} /> },
-  { id: 'days', label: 'Itinerary', icon: <CalendarDays size={16} /> },
-  { id: 'costs', label: 'Costs', icon: <PieChart size={16} /> },
-  { id: 'book', label: 'Book & export', icon: <ListChecks size={16} /> },
+  { id: 'overview', label: 'Overview', short: 'Overview', icon: <LayoutDashboard size={16} /> },
+  { id: 'days', label: 'Itinerary', short: 'Days', icon: <CalendarDays size={16} /> },
+  { id: 'costs', label: 'Costs', short: 'Costs', icon: <PieChart size={16} /> },
+  { id: 'book', label: 'Book & export', short: 'Book', icon: <ListChecks size={16} /> },
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
@@ -50,7 +50,8 @@ export function PlanView({ plan }: { plan: Plan }) {
 
   const copySummary = async () => {
     try {
-      await navigator.clipboard.writeText(await exportText(plan))
+      // Built in the browser: instant, no round trip to the planner.
+      await navigator.clipboard.writeText(planOutline(plan))
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
@@ -59,7 +60,7 @@ export function PlanView({ plan }: { plan: Plan }) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl animate-fade-up space-y-5">
+    <div className="mx-auto max-w-6xl animate-fade-up space-y-5 2xl:max-w-7xl">
       <div className="relative overflow-hidden rounded-2xl bg-brand-900 text-white shadow-lift">
         {photo && <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" />}
         <div className={clsx('absolute inset-0', photo ? 'bg-gradient-to-r from-brand-950/95 via-brand-950/75 to-brand-950/30' : 'bg-brand-900')} />
@@ -135,19 +136,21 @@ export function PlanView({ plan }: { plan: Plan }) {
       )}
 
       <div className="no-print sticky top-16 z-[500] -mx-1 bg-[#f4f6f9]/95 px-1 py-2 backdrop-blur dark:bg-ink-900/95">
-        <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-soft dark:border-white/10 dark:bg-ink-800">
+        <div className="grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-soft dark:border-white/10 dark:bg-ink-800">
           {TABS.map((item) => (
             <button
               key={item.id}
               onClick={() => setTab(item.id)}
               className={clsx(
-                'inline-flex flex-1 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition',
+                'flex min-w-0 flex-col items-center justify-center gap-0.5 whitespace-nowrap rounded-lg px-1 py-1.5 text-[11px] font-semibold transition active:scale-95 sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm',
                 tab === item.id
                   ? 'bg-brand-700 text-white shadow-sm dark:bg-brand-500'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white',
               )}
             >
-              {item.icon} {item.label}
+              {item.icon}
+              <span className="sm:hidden">{item.short}</span>
+              <span className="hidden truncate sm:inline">{item.label}</span>
             </button>
           ))}
         </div>

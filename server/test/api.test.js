@@ -214,6 +214,10 @@ describe('trips', () => {
     assert.equal(res.body.stats.plansGenerated, 4)
     assert.equal(res.body.stats.destinations, 2)
     assert.deepEqual(res.body.stats.budgetPlanned, [{ currency: 'INR', amount: Math.round(710 * 85) + 300 * 85 }])
+    assert.equal(res.body.stats.shared, 0)
+    assert.equal(res.body.stats.places.length, 2)
+    assert.equal(res.body.stats.activity.length, 6)
+    assert.equal(res.body.stats.activity.at(-1).trips, 2)
   })
 })
 

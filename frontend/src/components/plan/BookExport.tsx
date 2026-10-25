@@ -1,26 +1,14 @@
-import { CalendarPlus, Download, ExternalLink as LinkIcon, FileDown, Info, MapPinned, Plane, TrainFront } from 'lucide-react'
-import { useState } from 'react'
-import { downloadExport } from '../../lib/api'
+import clsx from 'clsx'
+import { CalendarPlus, ChevronDown, Download, ExternalLink as LinkIcon, FileDown, Info, MapPinned, Plane, TrainFront } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { downloadIcs, googleCalendarUrl, outlookCalendarUrl } from '../../lib/calendar'
 import type { Display } from '../../lib/money'
+import { toast } from '../../lib/toast'
 import type { Plan } from '../../lib/types'
 import { Card, ExternalLink, SectionTitle } from '../ui'
 
 export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPdf: () => void }) {
-  const [busy, setBusy] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const links = plan.links || {}
-
-  const download = async (kind: 'text' | 'ics') => {
-    setBusy(kind)
-    setError(null)
-    try {
-      await downloadExport(kind, plan)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Download failed')
-    } finally {
-      setBusy(null)
-    }
-  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -55,24 +43,13 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
       <Card className="p-4">
         <SectionTitle icon={<Download size={18} />} title="Take it with you" />
         <div className="flex flex-wrap gap-2">
-          <button onClick={onPdf} className="inline-flex items-center gap-2 rounded-lg bg-coral-500 px-4 py-2 text-sm font-semibold text-white hover:bg-coral-600">
+          <button onClick={onPdf} className="btn-shine inline-flex items-center gap-2 rounded-lg bg-coral-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-coral-600">
             <FileDown size={15} /> Download PDF itinerary
           </button>
-          <button onClick={() => void download('text')} disabled={!!busy} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5">
-            <Download size={15} /> {busy === 'text' ? 'Preparing…' : 'Download plan (.txt)'}
-          </button>
-          <button
-            onClick={() => void download('ics')}
-            disabled={!!busy || !plan.dates.start_date}
-            title={plan.dates.start_date ? 'Add every timetable item to your calendar' : 'Add travel dates to get a calendar file'}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5"
-          >
-            <CalendarPlus size={15} /> {busy === 'ics' ? 'Preparing…' : 'Add to calendar (.ics)'}
-          </button>
+          <AddToCalendar plan={plan} />
         </div>
         <p className="mt-2 text-xs text-slate-500">The PDF is an e-ticket style travel document with photos, journey and hotel details, costs and every day's timetable. In the print window, choose “Save as PDF”.</p>
-        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
-        {!plan.dates.start_date && <p className="mt-2 text-xs text-slate-500">Tell me your travel dates in the chat to unlock the calendar file.</p>}
+        {!plan.dates.start_date && <p className="mt-2 text-xs text-slate-500">Tell me your travel dates in the chat to add the trip to your calendar.</p>}
       </Card>
 
       <Card className="p-4 lg:col-span-2">
@@ -84,5 +61,71 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
         </ul>
       </Card>
     </div>
+  )
+}
+
+/** Google and Outlook open a filled-in event; the .ics file adds every timetable item (Apple, Outlook desktop, any app). */
+function AddToCalendar({ plan }: { plan: Plan }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const ready = !!plan.dates.start_date
+  useEffect(() => {
+    if (!open) return
+    const onDown = (event: PointerEvent) => box.current && !box.current.contains(event.target as Node) && setOpen(false)
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
+    document.addEventListener('pointerdown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const ics = () => {
+    try {
+      downloadIcs(plan)
+      toast.success('Calendar file downloaded. Open it to add every stop of the trip.')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The calendar file could not be created.')
+    }
+    setOpen(false)
+  }
+  const item = 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-brand-50 dark:text-slate-200 dark:hover:bg-white/5'
+
+  return (
+    <div className="relative" ref={box}>
+      <button
+        onClick={() => setOpen(!open)}
+        disabled={!ready}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title={ready ? 'Add this trip to your calendar' : 'Add travel dates first'}
+        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold transition hover:border-brand-300 hover:bg-brand-50 disabled:opacity-50 dark:border-white/10 dark:hover:bg-white/5"
+      >
+        <CalendarPlus size={15} /> Add to calendar <ChevronDown size={14} className={clsx('transition', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-0 z-50 mt-2 w-64 animate-pop rounded-xl border border-slate-200 bg-white p-1.5 shadow-lift sm:left-auto sm:right-0 dark:border-white/10 dark:bg-ink-800">
+          <a role="menuitem" href={googleCalendarUrl(plan)} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className={item}>
+            <CalendarBadge color="#1a73e8" letter="G" /> Google Calendar
+          </a>
+          <a role="menuitem" href={outlookCalendarUrl(plan)} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} className={item}>
+            <CalendarBadge color="#0f6cbd" letter="O" /> Outlook.com
+          </a>
+          <button role="menuitem" onClick={ics} className={item}>
+            <CalendarBadge color="#475569" letter="" /> <span>Apple / other app<span className="block text-xs font-normal text-slate-500">.ics file, every stop as an event</span></span>
+          </button>
+          <div className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2 text-[11px] text-slate-500 dark:border-white/10">Google and Outlook add the trip as one event with the day-by-day plan inside.</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CalendarBadge({ color, letter }: { color: string; letter: string }) {
+  return (
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-bold text-white" style={{ background: color }}>
+      {letter || <Download size={13} />}
+    </span>
   )
 }

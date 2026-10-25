@@ -8,24 +8,42 @@ import { Header } from './components/Header'
 import { Landing } from './components/Landing'
 import { PlanningProgress } from './components/PlanningProgress'
 import { TripBrief } from './components/TripBrief'
-import { ACCOUNTS_ENABLED, useAccount, useSession } from './lib/account'
+import { ACCOUNTS_ENABLED, SERVER_URL, useAccount, useSession } from './lib/account'
 import { health } from './lib/api'
 import { Toaster } from './lib/toast'
+import { prefetch, tripsPath } from './lib/cache'
 import { useTripSync } from './lib/tripSync'
 import { useActivePlan, useStarted, useStore } from './store'
 
-// The plan view carries the map and chart libraries; load it only once there is a plan.
-const PlanView = lazy(() => import('./components/plan/PlanView').then((m) => ({ default: m.PlanView })))
-// Account pages load on demand.
-const AuthPage = lazy(() => import('./pages/AuthPage').then((m) => ({ default: m.AuthPage })))
-const SsoCallback = lazy(() => import('./pages/AuthPage').then((m) => ({ default: m.SsoCallback })))
-const PhotoSetup = lazy(() => import('./pages/PhotoSetup').then((m) => ({ default: m.PhotoSetup })))
-const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
-const SettingsPage = lazy(() => import('./pages/SettingsPage').then((m) => ({ default: m.SettingsPage })))
-const HistoryPage = lazy(() => import('./pages/HistoryPage').then((m) => ({ default: m.HistoryPage })))
-const TripPage = lazy(() => import('./pages/TripPage').then((m) => ({ default: m.TripPage })))
-const SharedTrip = lazy(() => import('./pages/SharedTrip').then((m) => ({ default: m.SharedTrip })))
-const NotFound = lazy(() => import('./pages/NotFound').then((m) => ({ default: m.NotFound })))
+// Pages and the plan view (map and chart libraries) are separate chunks. They load on demand, and
+// are fetched in the background once the first screen is up, so later clicks open them instantly.
+const chunks = {
+  plan: () => import('./components/plan/PlanView'),
+  auth: () => import('./pages/AuthPage'),
+  photo: () => import('./pages/PhotoSetup'),
+  profile: () => import('./pages/ProfilePage'),
+  settings: () => import('./pages/SettingsPage'),
+  history: () => import('./pages/HistoryPage'),
+  trip: () => import('./pages/TripPage'),
+  shared: () => import('./pages/SharedTrip'),
+  notFound: () => import('./pages/NotFound'),
+}
+const PlanView = lazy(() => chunks.plan().then((m) => ({ default: m.PlanView })))
+const AuthPage = lazy(() => chunks.auth().then((m) => ({ default: m.AuthPage })))
+const SsoCallback = lazy(() => chunks.auth().then((m) => ({ default: m.SsoCallback })))
+const PhotoSetup = lazy(() => chunks.photo().then((m) => ({ default: m.PhotoSetup })))
+const ProfilePage = lazy(() => chunks.profile().then((m) => ({ default: m.ProfilePage })))
+const SettingsPage = lazy(() => chunks.settings().then((m) => ({ default: m.SettingsPage })))
+const HistoryPage = lazy(() => chunks.history().then((m) => ({ default: m.HistoryPage })))
+const TripPage = lazy(() => chunks.trip().then((m) => ({ default: m.TripPage })))
+const SharedTrip = lazy(() => chunks.shared().then((m) => ({ default: m.SharedTrip })))
+const NotFound = lazy(() => chunks.notFound().then((m) => ({ default: m.NotFound })))
+
+function whenIdle(fn: () => void) {
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
+  if (w.requestIdleCallback) w.requestIdleCallback(fn, { timeout: 4000 })
+  else setTimeout(fn, 1500)
+}
 
 export default function App() {
   const { needsAccessCode, accessCode, setNeedsAccessCode } = useStore()
@@ -38,6 +56,13 @@ export default function App() {
       .then((info) => info.access_code_required && !accessCode && setNeedsAccessCode(true))
       .catch(() => undefined)
   }, [accessCode, setNeedsAccessCode])
+
+  useEffect(() => {
+    // Wake the accounts server too (a cold start takes a few seconds), then preload the other pages.
+    if (ACCOUNTS_ENABLED) void fetch(`${SERVER_URL}/api/health`).catch(() => undefined)
+    whenIdle(() => Object.values(chunks).forEach((load) => void load().catch(() => undefined)))
+  }, [])
+  usePrefetchAccount()
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -86,6 +111,14 @@ function SignedIn({ children }: { children: ReactNode }) {
  * A signed-in traveler's saved preferences follow them: language, theme and read-aloud apply on sign-in,
  * and changing the chat language updates their settings. New accounts are offered the photo step once.
  */
+/** Signed in: fetch the profile stats and the first page of My trips while the visitor is idle. */
+function usePrefetchAccount() {
+  const hasProfile = !!useAccount((s) => s.profile)
+  useEffect(() => {
+    if (hasProfile) whenIdle(() => { prefetch('/api/stats'); prefetch(tripsPath()) })
+  }, [hasProfile])
+}
+
 function usePreferences() {
   const profile = useAccount((s) => s.profile)
   const update = useAccount((s) => s.update)
@@ -139,7 +172,7 @@ function Workspace() {
 
   return (
     <>
-      <main className="mx-auto grid w-full max-w-[1600px] flex-1 lg:grid-cols-[400px_minmax(0,1fr)] xl:grid-cols-[440px_minmax(0,1fr)]">
+      <main className="mx-auto grid w-full max-w-[110rem] flex-1 lg:grid-cols-[25rem_minmax(0,1fr)] xl:grid-cols-[27.5rem_minmax(0,1fr)]">
         <aside
           className={clsx(
             'min-h-0 border-slate-200/80 lg:sticky lg:top-16 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:border-r dark:border-white/10',

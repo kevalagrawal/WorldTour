@@ -1,7 +1,7 @@
 import { AuthenticateWithRedirectCallback, useSignIn, useSignUp } from '@clerk/clerk-react'
 import clsx from 'clsx'
 import { ArrowLeft, Check, Eye, EyeOff, Loader2, Lock, Mail, Phone, ShieldCheck, User } from 'lucide-react'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { ACCOUNTS_ENABLED, useSession } from '../lib/account'
 import { useWikiImage } from '../lib/images'
@@ -33,11 +33,11 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const { loaded, signedIn } = useSession()
   const [params] = useSearchParams()
   const redirect = params.get('redirect') || '/'
-  const photo = useWikiImage(['Lake Palace'], 1280)
+  const photos = [useWikiImage(['Lake Palace'], 1280), useWikiImage(['Santorini'], 1280), useWikiImage(['Kerala backwaters'], 1280)]
 
   if (!ACCOUNTS_ENABLED) {
     return (
-      <Shell photo={photo}>
+      <Shell photos={photos}>
         <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Accounts are coming soon</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">You can plan trips as a guest right now. Saving trips and history will appear here once accounts are switched on.</p>
         <Link to="/" className="mt-6 inline-flex h-11 items-center rounded-lg bg-brand-700 px-5 text-sm font-semibold text-white hover:bg-brand-800">Plan a trip</Link>
@@ -55,18 +55,47 @@ export function AuthPage({ mode }: { mode: Mode }) {
     }
     return <Navigate to={fresh ? `/onboarding/photo${redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''}` : redirect} replace />
   }
-  return <Shell photo={photo}>{mode === 'sign-up' ? <SignUpForm redirect={redirect} /> : <SignInForm redirect={redirect} />}</Shell>
+  // key: switching between sign-in and sign-up replays the entrance animation.
+  return <Shell photos={photos}><div key={mode}>{mode === 'sign-up' ? <SignUpForm redirect={redirect} /> : <SignInForm redirect={redirect} />}</div></Shell>
 }
 
-function Shell({ photo, children }: { photo: string | null; children: ReactNode }) {
+const SLIDES = [
+  { place: 'Udaipur, India', line: 'Lake palaces, planned hour by hour.' },
+  { place: 'Santorini, Greece', line: 'Flights, hotels and days in one plan.' },
+  { place: 'Kerala, India', line: 'Slow backwaters at your own pace.' },
+]
+
+function Shell({ photos, children }: { photos: (string | null)[]; children: ReactNode }) {
+  // A slow slideshow of destinations; motion stops for people who prefer reduced motion (index.css).
+  const [slide, setSlide] = useState(0)
+  useEffect(() => {
+    const timer = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 6000)
+    return () => clearInterval(timer)
+  }, [])
   return (
     <main className="grid flex-1 lg:grid-cols-[1fr_1.05fr]">
       <aside className="relative hidden overflow-hidden bg-brand-950 text-white lg:block">
-        {photo && <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" />}
+        {photos.map((photo, i) =>
+          photo ? (
+            <img key={i} src={photo} alt="" className={clsx('animate-ken-burns absolute inset-0 h-full w-full object-cover transition-opacity duration-[1500ms]', i === slide ? 'opacity-80' : 'opacity-0')} />
+          ) : null,
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-brand-950 via-brand-950/60 to-brand-950/20" />
-        <div className="relative flex h-full flex-col justify-end p-10">
-          <h2 className="max-w-md text-3xl font-extrabold leading-tight">Every trip you plan, saved and ready to book.</h2>
-          <ul className="mt-6 space-y-2.5 text-sm text-white/85">
+        <svg className="pointer-events-none absolute right-10 top-16 h-40 w-72 text-white/40" viewBox="0 0 300 160" fill="none" aria-hidden="true">
+          <path id="flight-path" d="M10 150 C 90 20, 200 20, 290 70" stroke="currentColor" strokeWidth="2" strokeDasharray="6 8" className="animate-dash" />
+          <path d="M-7 -5 L9 0 L-7 5 L-4 0 Z" fill="white">
+            <animateMotion dur="9s" repeatCount="indefinite" rotate="auto">
+              <mpath href="#flight-path" />
+            </animateMotion>
+          </path>
+        </svg>
+        <div className="relative flex h-full flex-col justify-end p-10 xl:p-14">
+          <div key={slide} className="mb-6 animate-fade-up">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-coral-400">{SLIDES[slide].place}</div>
+            <div className="mt-1 text-sm text-white/80">{SLIDES[slide].line}</div>
+          </div>
+          <h2 className="max-w-md animate-fade-up text-3xl font-extrabold leading-tight xl:text-4xl">Every trip you plan, saved and ready to book.</h2>
+          <ul className="stagger mt-6 space-y-2.5 text-sm text-white/85">
             {['Your prompts and every itinerary, in one history', 'Pick up any trip where you left off', 'Share a read-only plan with family and friends', 'Your home city, currency and language remembered'].map((item) => (
               <li key={item} className="flex items-center gap-2.5">
                 <span className="grid h-5 w-5 place-items-center rounded-full bg-coral-500"><Check size={12} strokeWidth={3} /></span>
@@ -74,10 +103,17 @@ function Shell({ photo, children }: { photo: string | null; children: ReactNode 
               </li>
             ))}
           </ul>
+          <div className="mt-8 flex gap-1.5">
+            {SLIDES.map((s, i) => (
+              <button key={s.place} onClick={() => setSlide(i)} aria-label={`Show ${s.place}`} className={clsx('h-1.5 rounded-full transition-all duration-500', i === slide ? 'w-8 bg-white' : 'w-3 bg-white/40 hover:bg-white/70')} />
+            ))}
+          </div>
         </div>
       </aside>
-      <section className="flex items-center justify-center px-4 py-10 sm:px-8">
-        <div className="w-full max-w-md">{children}</div>
+      <section className="relative flex items-center justify-center overflow-hidden px-4 py-8 sm:px-8 sm:py-12">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 animate-blob rounded-full bg-brand-200/40 blur-3xl dark:bg-brand-500/15" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 animate-blob rounded-full bg-coral-100/60 blur-3xl [animation-delay:-6s] dark:bg-coral-500/10" aria-hidden="true" />
+        <div className="relative w-full max-w-md animate-fade-up rounded-2xl border border-slate-200/70 bg-white/85 p-5 shadow-lift backdrop-blur sm:p-8 dark:border-white/10 dark:bg-ink-800/85">{children}</div>
       </section>
     </main>
   )
@@ -101,11 +137,11 @@ function Field({
       <span className="mb-1.5 block text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</span>
       <span
         className={clsx(
-          'flex items-center gap-2 rounded-lg border bg-white px-3 transition focus-within:ring-4 dark:bg-ink-800',
+          'group/field flex items-center gap-2 rounded-lg border bg-white px-3 transition duration-200 focus-within:-translate-y-px focus-within:shadow-soft focus-within:ring-4 dark:bg-ink-800',
           error ? 'border-rose-400 focus-within:ring-rose-500/15' : 'border-slate-300 focus-within:border-brand-500 focus-within:ring-brand-500/15 dark:border-white/15',
         )}
       >
-        <span className="text-slate-400">{icon}</span>
+        <span className="text-slate-400 transition-colors group-focus-within/field:text-brand-600 dark:group-focus-within/field:text-brand-300">{icon}</span>
         {children}
       </span>
       {error ? <span className="mt-1 block text-xs font-medium text-rose-600">{error}</span> : hint && <span className="mt-1 block text-xs text-slate-500">{hint}</span>}
@@ -160,7 +196,7 @@ function Alert({ children }: { children: ReactNode }) {
 
 function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {
   return (
-    <button type="submit" disabled={busy} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-700 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-60 dark:bg-brand-500 dark:hover:bg-brand-400">
+    <button type="submit" disabled={busy} className="btn-shine flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-brand-700 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-px hover:bg-brand-800 hover:shadow-lift active:translate-y-0 disabled:opacity-60 dark:bg-brand-500 dark:hover:bg-brand-400">
       {busy && <Loader2 size={16} className="animate-spin" />} {children}
     </button>
   )
@@ -283,7 +319,7 @@ function SignUpForm({ redirect }: { redirect: string }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate>
+    <form onSubmit={submit} noValidate className="stagger">
       <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">Create your account</h1>
       <p className="mb-6 mt-1.5 text-sm text-slate-600 dark:text-slate-300">
         Already have one? <Link to={`/sign-in${redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="font-semibold text-brand-700 hover:underline dark:text-brand-300">Sign in</Link>
@@ -316,10 +352,10 @@ function SignUpForm({ redirect }: { redirect: string }) {
             </span>
           }
         >
-          <PasswordInput value={form.password} onChange={set('password')} autoComplete="new-password" />
+          <PasswordInput value={form.password} onChange={set('password')} autoComplete="new-password" placeholder="Create a password (8+ characters)" />
         </Field>
         <Field label="Confirm password" icon={<ShieldCheck size={17} />} error={touched ? problems.confirm : null}>
-          <PasswordInput value={form.confirm} onChange={set('confirm')} autoComplete="new-password" />
+          <PasswordInput value={form.confirm} onChange={set('confirm')} autoComplete="new-password" placeholder="Type the password again" />
         </Field>
       </div>
       {/* Clerk's bot protection renders here when it is switched on for the application. */}
@@ -414,7 +450,7 @@ function SignInForm({ redirect }: { redirect: string }) {
 
   if (step !== 'password') {
     return (
-      <form onSubmit={step === 'reset-request' ? requestReset : reset} noValidate>
+      <form onSubmit={step === 'reset-request' ? requestReset : reset} noValidate className="stagger">
         <button type="button" onClick={() => { setStep('password'); setError(null); setNote(null) }} className="mb-6 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">
           <ArrowLeft size={15} /> Back to sign in
         </button>
@@ -424,15 +460,15 @@ function SignInForm({ redirect }: { redirect: string }) {
         <div className="space-y-4">
           {step === 'reset-request' ? (
             <Field label="Email" icon={<Mail size={17} />}>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className={inputClass} required autoFocus />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" className={inputClass} required autoFocus />
             </Field>
           ) : (
             <>
               <Field label="Code from the email" icon={<ShieldCheck size={17} />}>
-                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" className={inputClass} required autoFocus />
+                <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" className={inputClass} required autoFocus />
               </Field>
               <Field label="New password" icon={<Lock size={17} />} hint="At least 8 characters">
-                <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" />
+                <PasswordInput value={password} onChange={setPassword} autoComplete="new-password" placeholder="New password (8+ characters)" />
               </Field>
             </>
           )}
@@ -445,8 +481,8 @@ function SignInForm({ redirect }: { redirect: string }) {
   }
 
   return (
-    <form onSubmit={submit} noValidate>
-      <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">Welcome back</h1>
+    <form onSubmit={submit} noValidate className="stagger">
+      <h1 className="text-2xl font-extrabold text-slate-900 sm:text-3xl dark:text-white">Welcome back <span className="inline-block origin-[70%_70%] animate-wave" aria-hidden="true">👋</span></h1>
       <p className="mb-6 mt-1.5 text-sm text-slate-600 dark:text-slate-300">
         New to WorldTour? <Link to={`/sign-up${redirect !== '/' ? `?redirect=${encodeURIComponent(redirect)}` : ''}`} className="font-semibold text-brand-700 hover:underline dark:text-brand-300">Create an account</Link>
       </p>
@@ -458,7 +494,7 @@ function SignInForm({ redirect }: { redirect: string }) {
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" placeholder="you@example.com" className={inputClass} required />
         </Field>
         <Field label="Password" icon={<Lock size={17} />}>
-          <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
+          <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" placeholder="Enter your password" />
         </Field>
       </div>
       <div className="mt-2 text-right">

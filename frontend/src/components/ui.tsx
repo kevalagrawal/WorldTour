@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
@@ -166,4 +166,25 @@ export function ConfirmDialog({
     </div>,
     document.body,
   )
+}
+
+/** Counts up from 0 to value when first shown (instantly for people who prefer reduced motion). */
+export function CountUp({ value, duration = 900 }: { value: number; duration?: number }) {
+  const [shown, setShown] = useState(0)
+  useEffect(() => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || value <= 0) {
+      const id = requestAnimationFrame(() => setShown(value))
+      return () => cancelAnimationFrame(id)
+    }
+    let frame = 0
+    const start = performance.now()
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration)
+      setShown(Math.round(value * (1 - Math.pow(1 - t, 3))))
+      if (t < 1) frame = requestAnimationFrame(tick)
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [value, duration])
+  return <>{shown.toLocaleString('en-IN')}</>
 }

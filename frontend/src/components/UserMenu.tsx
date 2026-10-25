@@ -1,10 +1,11 @@
 import { useClerk } from '@clerk/clerk-react'
 import clsx from 'clsx'
-import { ChevronDown, History, Languages, LogOut, Moon, Settings, Sun, UserRound } from 'lucide-react'
+import { ChevronDown, History, Languages, LogOut, Settings, UserRound } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ACCOUNTS_ENABLED, initials, useAccount, useSession } from '../lib/account'
 import { LANGUAGES } from '../lib/i18n'
+import { prefetch, tripsPath } from '../lib/cache'
 import { toast } from '../lib/toast'
 import { useStore } from '../store'
 
@@ -36,6 +37,8 @@ function AccountMenu() {
   const location = useLocation()
   if (!loaded) return <span className="h-9 w-9 animate-pulse rounded-full bg-slate-200 dark:bg-white/10" />
   if (!signedIn) {
+    // Already on the sign-in or sign-up page: the form is right there.
+    if (/^\/(sign-in|sign-up|sso-callback)/.test(location.pathname)) return null
     const back = location.pathname === '/' ? '' : `?redirect=${encodeURIComponent(location.pathname)}`
     return (
       <Link to={`/sign-in${back}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-white dark:hover:bg-white/5">
@@ -55,7 +58,6 @@ function SignedInMenu() {
   const { signOut } = useClerk()
   const navigate = useNavigate()
   const location = useLocation()
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
 
   useEffect(() => setOpen(false), [location.pathname])
   useEffect(() => {
@@ -69,18 +71,6 @@ function SignedInMenu() {
       document.removeEventListener('keydown', onKey)
     }
   }, [open])
-
-  const toggleTheme = () => {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try {
-      localStorage.setItem('wt-theme', next ? 'dark' : 'light')
-    } catch {
-      /* applies for this visit */
-    }
-    void useAccount.getState().update({ preferences: { theme: next ? 'dark' : 'light' } }).catch(() => undefined)
-  }
 
   const item = 'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/5'
 
@@ -106,8 +96,8 @@ function SignedInMenu() {
             </div>
           </div>
           <div className="py-1.5">
-            <Link role="menuitem" to="/profile" className={item}><UserRound size={16} /> Profile</Link>
-            <Link role="menuitem" to="/history" className={item}><History size={16} /> My trips</Link>
+            <Link role="menuitem" to="/profile" onPointerEnter={() => prefetch('/api/stats')} className={item}><UserRound size={16} /> Profile</Link>
+            <Link role="menuitem" to="/history" onPointerEnter={() => prefetch(tripsPath())} className={item}><History size={16} /> My trips</Link>
             <Link role="menuitem" to="/settings" className={item}><Settings size={16} /> Settings</Link>
           </div>
           <div className="border-t border-slate-100 px-3 py-2.5 dark:border-white/10">
@@ -127,7 +117,6 @@ function SignedInMenu() {
             </div>
           </div>
           <div className="border-t border-slate-100 pt-1.5 dark:border-white/10">
-            <button role="menuitem" onClick={toggleTheme} className={item}>{dark ? <Sun size={16} /> : <Moon size={16} />} {dark ? 'Light theme' : 'Dark theme'}</button>
             <button
               role="menuitem"
               onClick={() => {

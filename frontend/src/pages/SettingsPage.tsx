@@ -1,23 +1,23 @@
 import { useClerk, useUser } from '@clerk/clerk-react'
 import clsx from 'clsx'
-import { AlertTriangle, Check, KeyRound, Laptop, Loader2, LogOut, Mail, Moon, Smartphone, Sun, Trash2, UserRound, Wrench } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, Download, KeyRound, Laptop, Loader2, LogOut, Mail, Moon, ShieldCheck, Smartphone, Sun, Trash2, UserRound, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PhotoCropper } from '../components/PhotoCropper'
 import { Select } from '../components/Select'
 import { ConfirmDialog } from '../components/ui'
 import { Avatar } from '../components/UserMenu'
-import { server, useAccount, type Preferences, type Profile } from '../lib/account'
+import { server, useAccount, type Preferences, type Profile, type TripSummary } from '../lib/account'
 import { LANGUAGES } from '../lib/i18n'
 import { toast } from '../lib/toast'
 import { useStore } from '../store'
 import { Page, Panel } from './common'
 
 const TABS = [
-  { id: 'profile', label: 'Profile', icon: <UserRound size={16} /> },
-  { id: 'preferences', label: 'Preferences', icon: <Wrench size={16} /> },
-  { id: 'security', label: 'Security', icon: <KeyRound size={16} /> },
-  { id: 'account', label: 'Account', icon: <AlertTriangle size={16} /> },
+  { id: 'profile', label: 'Profile', hint: 'Photo, name, phone', icon: <UserRound size={16} /> },
+  { id: 'preferences', label: 'Preferences', hint: 'City, currency, theme', icon: <Wrench size={16} /> },
+  { id: 'security', label: 'Security', hint: 'Email, password, devices', icon: <KeyRound size={16} /> },
+  { id: 'account', label: 'Account', hint: 'Your data, delete', icon: <AlertTriangle size={16} /> },
 ] as const
 type Tab = (typeof TABS)[number]['id']
 
@@ -33,25 +33,40 @@ export function SettingsPage() {
   const location = useLocation()
   const navigate = useNavigate()
   const tab = (TABS.find((t) => `#${t.id}` === location.hash)?.id ?? 'profile') as Tab
+  const profile = useAccount((s) => s.profile)
   return (
-    <Page title="Settings" subtitle="Manage your details, preferences and sign-in.">
-      <div className="grid gap-5 md:grid-cols-[200px_1fr]">
-        <nav className="no-scrollbar flex gap-1 overflow-x-auto md:flex-col" aria-label="Settings sections">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => navigate({ hash: t.id }, { replace: true })}
-              aria-current={tab === t.id ? 'page' : undefined}
-              className={clsx(
-                'inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition',
-                tab === t.id ? 'bg-brand-700 text-white dark:bg-brand-500' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5',
-              )}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </nav>
-        <div className="min-w-0 space-y-5">
+    <Page wide title="Settings" subtitle="Manage your details, preferences and sign-in.">
+      <div className="grid gap-5 md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
+        <div className="space-y-4 md:sticky md:top-24 md:self-start">
+          <div className="hidden animate-fade-up items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-soft md:flex dark:border-white/10 dark:bg-ink-800">
+            <Avatar size={44} />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-slate-900 dark:text-white">{profile?.fullName || 'Your account'}</div>
+              <div className="flex items-center gap-1 truncate text-xs text-slate-500"><ShieldCheck size={12} className="shrink-0 text-emerald-500" /> Secured by Clerk</div>
+            </div>
+          </div>
+          <nav className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:flex-col md:px-0" aria-label="Settings sections">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => navigate({ hash: t.id }, { replace: true })}
+                aria-current={tab === t.id ? 'page' : undefined}
+                className={clsx(
+                  'group inline-flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition md:py-2.5',
+                  tab === t.id ? 'bg-brand-700 text-white shadow-sm dark:bg-brand-500' : 'text-slate-600 hover:bg-white hover:shadow-soft dark:text-slate-300 dark:hover:bg-white/5',
+                )}
+              >
+                <span className={clsx('grid h-7 w-7 shrink-0 place-items-center rounded-md transition', tab === t.id ? 'bg-white/15' : 'bg-slate-100 group-hover:bg-brand-50 group-hover:text-brand-700 dark:bg-white/5')}>{t.icon}</span>
+                <span className="min-w-0 flex-1">
+                  {t.label}
+                  <span className={clsx('hidden truncate text-xs font-normal md:block', tab === t.id ? 'text-white/75' : 'text-slate-500')}>{t.hint}</span>
+                </span>
+                <ChevronRight size={15} className={clsx('hidden shrink-0 transition md:block', tab === t.id ? 'translate-x-0.5 opacity-100' : 'opacity-0 group-hover:opacity-60')} />
+              </button>
+            ))}
+          </nav>
+        </div>
+        <div key={tab} className="min-w-0 space-y-5">
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'security' && <SecurityTab />}
@@ -79,10 +94,10 @@ function Label({ text, hint, children }: { text: string; hint?: ReactNode; child
 function SaveRow({ busy, saved, error, label = 'Save changes' }: { busy: boolean; saved: boolean; error: string | null; label?: string }) {
   return (
     <div className="mt-5 flex flex-wrap items-center gap-3">
-      <button type="submit" disabled={busy} className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-700 px-5 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-60 dark:bg-brand-500">
+      <button type="submit" disabled={busy} className="btn-shine inline-flex h-10 items-center gap-2 rounded-lg bg-brand-700 px-5 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-px hover:bg-brand-800 active:translate-y-0 disabled:opacity-60 dark:bg-brand-500">
         {busy && <Loader2 size={15} className="animate-spin" />} {label}
       </button>
-      {saved && <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600"><Check size={15} /> Saved</span>}
+      {saved && <span className="inline-flex animate-pop items-center gap-1 text-sm font-medium text-emerald-600"><Check size={15} /> Saved</span>}
       {error && <span className="text-sm font-medium text-rose-600">{error}</span>}
     </div>
   )
@@ -99,6 +114,7 @@ function useSaving() {
     try {
       await work()
       setSaved(true)
+      toast.success('Changes saved.')
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {
       setError(clerkMessage(e))
@@ -182,7 +198,13 @@ function PreferencesTab() {
   const setLanguage = useStore((s) => s.setLanguage)
   const [prefs, setPrefs] = useState<Preferences>(profile?.preferences ?? { homeCity: '', currency: '', language: 'en', theme: 'system', readAloud: false })
   const save = useSaving()
-  const set = <K extends keyof Preferences>(key: K, value: Preferences[K]) => setPrefs((p) => ({ ...p, [key]: value }))
+  const set = <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
+    setPrefs((p) => ({ ...p, [key]: value }))
+    if (key === 'theme') {
+      const dark = value === 'dark' || (value === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)
+      document.documentElement.classList.toggle('dark', dark)
+    }
+  }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -420,7 +442,9 @@ function AccountTab() {
   }
 
   return (
-    <Panel title={<span className="flex items-center gap-2 text-rose-600"><Trash2 size={16} /> Delete account</span>} description="Permanently deletes your account, profile photo, every saved trip, prompt and itinerary. This cannot be undone.">
+    <>
+    <DataPanel />
+    <Panel title={<span className="flex items-center gap-2 text-rose-600"><Trash2 size={16} /> Delete account</span>} description="Permanently deletes your account, profile photo, every saved trip, prompt and itinerary. This cannot be undone." className="border-rose-200 dark:border-rose-400/20">
       {error && <p className="mb-3 text-sm font-medium text-rose-600">{error}</p>}
       <button onClick={() => setOpen(true)} className="h-10 rounded-lg bg-rose-600 px-5 text-sm font-semibold text-white hover:bg-rose-700">Delete my account</button>
       <ConfirmDialog
@@ -439,6 +463,55 @@ function AccountTab() {
         onCancel={() => { setOpen(false); setTyped('') }}
         onConfirm={() => typed.trim() === 'DELETE' && !busy && void remove()}
       />
+    </Panel>
+    </>
+  )
+}
+
+/** Download everything WorldTour keeps about you (profile and trip list) as a JSON file. */
+function DataPanel() {
+  const profile = useAccount((s) => s.profile)
+  const [busy, setBusy] = useState(false)
+  const download = async () => {
+    setBusy(true)
+    try {
+      const trips: TripSummary[] = []
+      for (let page = 1; page <= 20; page++) {
+        const data = await server<{ trips: TripSummary[]; pages: number }>(`/api/trips?limit=50&page=${page}&sort=recent`)
+        trips.push(...data.trips)
+        if (page >= data.pages) break
+      }
+      const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), profile, trips }, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = Object.assign(document.createElement('a'), { href: url, download: 'worldtour-my-data.json' })
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      toast.success(`Downloaded your profile and ${trips.length} trip${trips.length === 1 ? '' : 's'}.`)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The download failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Panel title={<span className="flex items-center gap-2"><Download size={16} /> Your data</span>} description="A copy of your profile and the list of your saved trips, as a JSON file.">
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          { label: 'Stored by WorldTour', value: 'Profile, trips, prompts, plans' },
+          { label: 'Stored by Clerk', value: 'Email, password, sessions' },
+          { label: 'Stored by Cloudinary', value: profile?.photoUrl ? 'Your profile photo' : 'Nothing yet' },
+        ].map((row) => (
+          <div key={row.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{row.label}</div>
+            <div className="mt-0.5 text-sm font-medium text-slate-800 dark:text-slate-100">{row.value}</div>
+          </div>
+        ))}
+      </div>
+      <button onClick={() => void download()} disabled={busy} className="mt-4 inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:bg-brand-50 disabled:opacity-60 dark:border-white/15 dark:text-slate-200 dark:hover:bg-white/5">
+        {busy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} Download my data
+      </button>
     </Panel>
   )
 }

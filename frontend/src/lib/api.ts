@@ -168,21 +168,3 @@ export async function runPlan(
     }
   }
 }
-
-export async function downloadExport(kind: 'text' | 'ics', plan: Plan): Promise<void> {
-  const response = await request(`/api/export/${kind}`, { method: 'POST', headers: headers(null), body: JSON.stringify({ plan }) })
-  if (!response.ok) await fail(response)
-  const blob = await response.blob()
-  const match = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition') ?? '')
-  const name = match?.[1] ?? `worldtour-trip.${kind === 'ics' ? 'ics' : 'txt'}`
-  const url = URL.createObjectURL(blob)
-  const link = Object.assign(document.createElement('a'), { href: url, download: name })
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-export async function exportText(plan: Plan): Promise<string> {
-  const response = await request('/api/export/text', { method: 'POST', headers: headers(null), body: JSON.stringify({ plan }) })
-  if (!response.ok) await fail(response)
-  return response.text()
-}

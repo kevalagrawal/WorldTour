@@ -140,8 +140,17 @@ interface AccountState {
   clear: () => void
 }
 
+const PROFILE_KEY = 'wt-profile'
+function cachedProfile(): Profile | null {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null')
+  } catch {
+    return null
+  }
+}
+
 export const useAccount = create<AccountState>((set) => ({
-  profile: null,
+  profile: cachedProfile(),
   loading: false,
   error: null,
   refresh: async () => {
@@ -161,6 +170,16 @@ export const useAccount = create<AccountState>((set) => ({
   setProfile: (profile) => set({ profile }),
   clear: () => set({ profile: null, loading: false, error: null }),
 }))
+
+useAccount.subscribe((state, previous) => {
+  if (state.profile === previous.profile) return
+  try {
+    if (state.profile) localStorage.setItem(PROFILE_KEY, JSON.stringify(state.profile))
+    else localStorage.removeItem(PROFILE_KEY)
+  } catch {
+    /* only a speed-up */
+  }
+})
 
 // The chat uses the saved home city and currency as defaults (see ai/ ChatBody).
 useAccount.subscribe((state) => {

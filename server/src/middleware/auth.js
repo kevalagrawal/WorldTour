@@ -23,10 +23,11 @@ export function requireUser(identity) {
           { upsert: true, new: true, setDefaultsOnInsert: true },
         )
       }
-      // Record activity at most once a minute.
+      // Record activity at most once a minute, without making the request wait for the write.
       if (Date.now() - (user.lastActiveAt?.getTime() ?? 0) > 60_000) {
-        user.lastActiveAt = new Date()
-        await user.save()
+        const now = new Date()
+        User.updateOne({ _id: user._id }, { $set: { lastActiveAt: now } }).catch(() => undefined)
+        user.lastActiveAt = now
       }
       req.user = user
       req.clerkId = clerkId

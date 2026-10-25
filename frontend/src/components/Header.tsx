@@ -2,32 +2,25 @@ import clsx from 'clsx'
 import { Moon, Plus, RotateCcw, Sun } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ACCOUNTS_ENABLED, useAccount, useSession } from '../lib/account'
+import { ACCOUNTS_ENABLED, useSession } from '../lib/account'
 import { focusTripInput } from '../lib/focus'
 import { prettyDate } from '../lib/money'
+import { setTheme, useDarkTheme } from '../lib/theme'
 import { useStarted, useStore } from '../store'
 import { ConfirmDialog, Logo } from './ui'
 import { UserMenu } from './UserMenu'
 
+/** Always in the header, signed in or not, so it never appears and then disappears while the account loads. */
 function ThemeToggle() {
-  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
-  const toggle = () => {
-    const next = !dark
-    setDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    try {
-      localStorage.setItem('wt-theme', next ? 'dark' : 'light')
-    } catch {
-      /* theme still applies for this visit */
-    }
-  }
+  const dark = useDarkTheme()
   return (
     <button
-      onClick={toggle}
+      onClick={() => setTheme(!dark)}
       aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className="grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10"
+      title={dark ? 'Light mode' : 'Dark mode'}
+      className="grid h-9 w-9 place-items-center rounded-xl text-slate-600 transition hover:bg-slate-100 active:scale-95 dark:text-slate-300 dark:hover:bg-white/10"
     >
-      {dark ? <Sun size={18} /> : <Moon size={18} />}
+      <span key={dark ? 'sun' : 'moon'} className="animate-pop">{dark ? <Sun size={18} /> : <Moon size={18} />}</span>
     </button>
   )
 }
@@ -40,9 +33,6 @@ export function Header() {
   // The planner layout (trip pill, wide header) only on the planner page.
   const started = hasConversation && onHome
   const { signedIn } = useSession()
-  // Hooks run on every render, in the same order (calling one only after sign-in crashes React).
-  const hasProfile = !!useAccount((s) => s.profile)
-  const accountTheme = ACCOUNTS_ENABLED && signedIn && hasProfile
   const { reset, status, summary, plan } = useStore()
   const busy = status !== 'idle'
   const [confirming, setConfirming] = useState(false)
@@ -69,7 +59,7 @@ export function Header() {
           : 'border-slate-200/70 bg-white/90 dark:border-white/10 dark:bg-ink-900/90',
       )}
     >
-      <div className={clsx('mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6', started ? 'max-w-[1600px]' : 'max-w-7xl')}>
+      <div className={clsx('mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6', started ? 'max-w-[110rem]' : 'max-w-7xl')}>
         <button onClick={() => (onHome ? started && askNewTrip() : navigate('/'))} className="shrink-0" aria-label={onHome && started ? 'WorldTour — start a new trip' : 'WorldTour home'}>
           <Logo />
         </button>
@@ -101,7 +91,7 @@ export function Header() {
               <Plus size={16} /> <span className="hidden sm:inline">New trip</span>
             </button>
           )}
-          {!accountTheme && <ThemeToggle />}
+          <ThemeToggle />
           {!hasConversation && onHome && !(ACCOUNTS_ENABLED && signedIn) && (
             <a
               href="#plan"

@@ -7,6 +7,8 @@ import { PlanReadOnly } from '../components/plan/readOnly'
 import { ShareDialog } from '../components/ShareDialog'
 import { ConfirmDialog } from '../components/ui'
 import { server, type TripSummary } from '../lib/account'
+import { invalidate, load as loadCached, peek, setCached } from '../lib/cache'
+import { toast } from '../lib/toast'
 import { applySelection, type Selection } from '../lib/selection'
 import type { ChatMessage, Plan, Session } from '../lib/types'
 import { useStore } from '../store'
@@ -47,25 +49,45 @@ export function TripPage() {
   const [removing, setRemoving] = useState(false)
   const [renaming, setRenaming] = useState(false)
 
+  const path = `/api/trips/${id}`
   const load = useCallback(() => {
     setError(null)
-    server<{ trip: TripDetail }>(`/api/trips/${id}`)
-      .then(({ trip }) => {
-        setTrip(trip)
-        setNotes(trip.notes)
-        setSavedNotes(trip.notes)
-        setViewing(null)
-      })
-      .catch((e) => setError(e.message))
-  }, [id])
+    const show = ({ trip }: { trip: TripDetail }) => {
+      setTrip(trip)
+      setNotes(trip.notes)
+      setSavedNotes(trip.notes)
+      setViewing(null)
+    }
+    // Shown at once when opened before or prefetched (hovering it in My trips), then refreshed.
+    const cached = peek<{ trip: TripDetail }>(path)
+    if (cached) show(cached)
+    loadCached<{ trip: TripDetail }>(path)
+      .then(show)
+      .catch((e) => !cached && setError(e.message))
+  }, [path])
   useEffect(load, [load])
 
+  /** Applied on screen straight away; undone with a message if the server refuses. */
   const patch = async (body: Record<string, unknown>) => {
-    const { trip: updated } = await server<{ trip: TripSummary }>(`/api/trips/${id}`, { method: 'PATCH', body })
-    // The summary counts messages; keep the conversation itself.
-    const { messages: _count, ...changes } = updated
-    void _count
-    setTrip((t) => (t ? { ...t, ...changes } : t))
+    const before = trip
+    setTrip((t) => (t ? { ...t, ...body } : t))
+    try {
+      const { trip: updated } = await server<{ trip: TripSummary }>(path, { method: 'PATCH', body })
+      // The summary counts messages; keep the conversation itself.
+      const { messages: _count, ...changes } = updated
+      void _count
+      setTrip((t) => {
+        const next = t ? { ...t, ...changes } : t
+        if (next) setCached(path, { trip: next })
+        return next
+      })
+      invalidate('/api/trips?')
+      invalidate('/api/stats')
+    } catch (e) {
+      setTrip(before)
+      toast.error(e instanceof Error ? `Could not save the change. ${e.message}` : 'Could not save the change.')
+      throw e
+    }
   }
 
   const view = async (version: Version) => {
@@ -107,7 +129,7 @@ export function TripPage() {
         <button onClick={() => resume(trip.plan, trip.selection)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 dark:bg-brand-500">
           <Play size={15} /> Continue in planner
         </button>
-        <button onClick={() => void patch({ favorite: !trip.favorite })} aria-pressed={trip.favorite} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200">
+        <button onClick={() => void patch({ favorite: !trip.favorite }).catch(() => undefined)} aria-pressed={trip.favorite} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200">
           <Star size={15} className={trip.favorite ? 'fill-amber-400 text-amber-400' : ''} /> {trip.favorite ? 'Favourite' : 'Add to favourites'}
         </button>
         {trip.versionList.length > 0 && (
@@ -176,7 +198,7 @@ export function TripPage() {
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              onBlur={() => notes !== savedNotes && void patch({ notes }).then(() => setSavedNotes(notes))}
+              onBlur={() => notes !== savedNotes && void patch({ notes }).then(() => setSavedNotes(notes)).catch(() => undefined)}
               rows={4}
               maxLength={4000}
               placeholder="Booking references, packing reminders, ideas…"
@@ -210,10 +232,15 @@ export function TripPage() {
         onCancel={() => setRemoving(false)}
         onConfirm={() => {
           setRemoving(false)
-          void server(`/api/trips/${id}`, { method: 'DELETE' }).then(() => {
-            if (useStore.getState().tripId === id) useStore.getState().setTripId(null)
-            navigate('/history', { replace: true })
-          })
+          void server(path, { method: 'DELETE' })
+            .then(() => {
+              if (useStore.getState().tripId === id) useStore.getState().setTripId(null)
+              invalidate('/api/trips')
+              invalidate('/api/stats')
+              toast.success(`“${trip.title}” was deleted.`)
+              navigate('/history', { replace: true })
+            })
+            .catch((e) => toast.error(e instanceof Error ? e.message : 'Could not delete the trip.'))
         }}
       />
       {sharing && (
@@ -225,7 +252,7 @@ export function TripPage() {
           onChange={(enabled) => setTrip((t) => (t ? { ...t, shared: enabled, share: { ...t.share, enabled } } : t))}
         />
       )}
-      {renaming && <RenameDialog title={trip.title} onCancel={() => setRenaming(false)} onSave={(title) => { setRenaming(false); void patch({ title }) }} />}
+      {renaming && <RenameDialog title={trip.title} onCancel={() => setRenaming(false)} onSave={(title) => { setRenaming(false); void patch({ title }).catch(() => undefined) }} />}
     </Page>
   )
 }
