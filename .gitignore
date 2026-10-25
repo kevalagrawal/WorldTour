@@ -6,6 +6,7 @@
 # Python
 ai/venv/
 ai/.venv/
+ai/logs/
 __pycache__/
 *.py[cod]
 *.egg-info/

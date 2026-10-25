@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import math
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
@@ -73,7 +74,8 @@ class HotelAgent(BaseAgent):
 
         results, errors = [], []
         with ThreadPoolExecutor(max_workers=len(cities)) as pool:
-            futures = [pool.submit(search, city) for city in cities]
+            # copy_context keeps the run_id and agent on the API log lines written from these threads
+            futures = [pool.submit(contextvars.copy_context().run, search, city) for city in cities]
             for future in futures:
                 try:
                     results.append(future.result())

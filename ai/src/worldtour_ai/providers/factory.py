@@ -15,6 +15,7 @@ from worldtour_ai.providers.routing.local_graph_provider import LocalGraphProvid
 from worldtour_ai.providers.routing.osrm_provider import OSRMProvider
 from worldtour_ai.providers.weather.open_meteo_provider import OpenMeteoProvider
 from worldtour_ai.utils.exceptions import ProviderError
+from worldtour_ai.utils.agent_logs import log_event
 from worldtour_ai.utils.logging import get_logger
 
 logger = get_logger("worldtour.providers")
@@ -55,7 +56,16 @@ def _first_success(chain: list, method: str, label: str, *args, **kwargs) -> dic
         except Exception as exc:
             errors.append(f"{provider.name}: {exc}")
             logger.debug("%s provider %s failed: %s", label, provider.name, exc)
+            log_event("provider_failed", level="warning", kind=label.lower(), provider=provider.name, error_type=type(exc).__name__, error=str(exc), next_provider=_next_name(chain, provider))
+            continue
+        log_event("provider_empty", level="warning", kind=label.lower(), provider=provider.name, next_provider=_next_name(chain, provider))
+    log_event("provider_chain_failed", level="error", kind=label.lower(), tried=[p.name for p in chain], errors=errors or ["no provider is configured"])
     raise ProviderError("; ".join(errors) or f"no {label.lower()} provider is configured")
+
+
+def _next_name(chain: list, provider) -> str | None:
+    index = chain.index(provider)
+    return chain[index + 1].name if index + 1 < len(chain) else None
 
 
 class FlightGateway:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from worldtour_ai.config.settings import get_settings
+from worldtour_ai.utils.agent_logs import log_api_call
 from worldtour_ai.utils.exceptions import ConfigurationError, ProviderError, QuotaExceededError
 from worldtour_ai.utils.http import HttpClient
 
@@ -48,6 +49,14 @@ class OpenRouterProvider:
             raise ProviderError("Network access is disabled")
         import httpx
 
+        started = time.perf_counter()
+        try:
+            return self._post(httpx, settings, model, system_prompt, user_prompt, timeout, started)
+        except ProviderError as exc:
+            log_api_call("openrouter", "https://openrouter.ai/api/v1/chat/completions", status=getattr(exc, "status", None), duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=str(exc), model=model)
+            raise
+
+    def _post(self, httpx, settings, model, system_prompt, user_prompt, timeout, started) -> str:
         try:
             response = httpx.post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -82,6 +91,8 @@ class OpenRouterProvider:
             raise ProviderError(f"OpenRouter returned {response.status_code}")
         payload = response.json()
         try:
-            return payload["choices"][0]["message"]["content"]
+            content = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise ProviderError("OpenRouter response had no message") from exc
+        log_api_call("openrouter", "https://openrouter.ai/api/v1/chat/completions", status=response.status_code, duration_ms=(time.perf_counter() - started) * 1000, ok=True, model=payload.get("model") or model)
+        return content

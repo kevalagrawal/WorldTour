@@ -32,6 +32,7 @@ from worldtour_ai.utils.events import (
     WORKFLOW_STARTED,
     make_event,
 )
+from worldtour_ai.utils.agent_logs import agent_span
 from worldtour_ai.workflows.state import TravelState
 
 
@@ -43,7 +44,9 @@ def _guard(agent, state: dict) -> dict:
     if agent.agent_id not in (state.get("required_agents") or []):
         return {}
     try:
-        return agent.execute(state)
+        with agent_span(agent.agent_id, state.get("run_id")) as span:
+            span["result"] = agent.execute(state)
+        return span["result"]
     except Exception as exc:
         return {
             "errors": [f"{agent.agent_id}: {exc}"],
@@ -161,7 +164,9 @@ def constraint_validator(state: TravelState) -> dict:
 def coordinator(state: TravelState) -> dict:
     if state.get("needs_clarification"):
         return {}
-    return CoordinatorAgent().execute(state)
+    with agent_span("COORDINATOR_AGENT", state.get("run_id")) as span:
+        span["result"] = CoordinatorAgent().execute(state)
+    return span["result"]
 
 
 def flight_node(state: TravelState) -> dict:

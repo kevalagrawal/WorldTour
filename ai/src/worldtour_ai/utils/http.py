@@ -16,6 +16,7 @@ from worldtour_ai.utils.exceptions import (
     QuotaExceededError,
     RateLimitError,
 )
+from worldtour_ai.utils.agent_logs import log_api_call, service_for
 from worldtour_ai.utils.logging import get_logger
 
 logger = get_logger("worldtour.http")
@@ -77,19 +78,33 @@ class HttpClient:
             cached = _cache.get(cache_key)
             if cached is not None:
                 logger.debug("Cache hit for %s", redact(url))
+                log_api_call(service_for(url), url, status=None, duration_ms=0, ok=True, cached=True)
                 return cached
 
         tries = attempts if attempts is not None else settings.max_retry_attempts
+        attempt_no = [0]
 
         def _once() -> dict:
             logger.debug("GET %s", redact(url))
+            attempt_no[0] += 1
+            started = time.perf_counter()
+            status: int | None = None
             try:
-                response = httpx.get(url, params=params, headers=headers, timeout=self.timeout)
-            except httpx.TimeoutException as exc:
-                raise ProviderError(f"Request timed out: {redact(url)}") from exc
-            except httpx.HTTPError as exc:
-                raise ProviderError(f"HTTP error: {exc}") from exc
+                try:
+                    response = httpx.get(url, params=params, headers=headers, timeout=self.timeout)
+                except httpx.TimeoutException as exc:
+                    raise ProviderError(f"Request timed out after {self.timeout:.0f}s") from exc
+                except httpx.HTTPError as exc:
+                    raise ProviderError(f"HTTP error: {type(exc).__name__}") from exc
+                status = response.status_code
+                payload = _check(response)
+            except Exception as exc:
+                log_api_call(service_for(url), url, status=status, duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=str(exc), attempt=attempt_no[0])
+                raise
+            log_api_call(service_for(url), url, status=status, duration_ms=(time.perf_counter() - started) * 1000, ok=True, attempt=attempt_no[0])
+            return payload
 
+        def _check(response) -> dict:
             if response.status_code == 429:
                 raise RateLimitError("Provider rate limit reached")
             if response.status_code in {402, 403} and "quota" in response.text.lower():

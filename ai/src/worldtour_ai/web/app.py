@@ -22,6 +22,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from datetime import date
 
 import httpx
@@ -32,6 +33,7 @@ from pydantic import BaseModel
 
 from worldtour_ai.config.settings import get_settings
 from worldtour_ai.services.chat_session import chat_step
+from worldtour_ai.utils.agent_logs import log_event, new_run_id, run_context
 from worldtour_ai.services.translate import LANGUAGES, from_english, to_english
 from worldtour_ai.services.exporter import file_stem, plan_calendar, plan_text
 from worldtour_ai.workflows.state import fresh_state
@@ -152,15 +154,18 @@ def chat(body: ChatBody, request: Request) -> dict:
     if not body.message.strip():
         raise HTTPException(status_code=400, detail="Please type a message.")
     try:
+        started = time.perf_counter()
         language = body.language if body.language in LANGUAGES else "en"
         defaults = {"home_city": (body.home_city or "")[:80], "currency": (body.currency or "")[:3]}
         result = chat_step(body.session, to_english(body.message[:2000], language), defaults=defaults)
         if language != "en":
             result["reply_en"] = result["reply"]
             result["reply"] = from_english(result["reply"], language)
+        log_event("chat_turn", stage=result["session"].get("stage"), ready=result.get("ready"), asked=result["session"].get("pending"), language=language, duration_ms=round((time.perf_counter() - started) * 1000))
         return result
     except Exception as exc:
         logger.exception("chat step failed")
+        log_event("chat_failed", level="error", error_type=type(exc).__name__, error=str(exc))
         raise HTTPException(status_code=500, detail="Sorry, I couldn't process that message. Please try rephrasing it.") from exc
 
 
@@ -176,20 +181,36 @@ def plan(body: PlanBody, request: Request) -> StreamingResponse:
     history = session.get("history") or []
     first = next((m["content"] for m in history if m.get("role") == "user"), "trip")
 
+    run_id = new_run_id()
+
     def run(out: queue.Queue) -> None:
         seen, final = 0, None
-        try:
-            state = fresh_state(first, history, trip, ready=True)
-            for snapshot in _workflow().stream(state, stream_mode="values"):
-                final = snapshot
-                events = snapshot.get("agent_execution_history") or []
-                for event in events[seen:]:
-                    out.put(("event", event))
-                seen = len(events)
-            out.put(("done", (final or {}).get("final_plan")))
-        except Exception as exc:  # report, don't hang the browser
-            logger.exception("planning failed")
-            out.put(("error", f"Planning failed: {exc}"))
+        started = time.perf_counter()
+        with run_context(run_id):
+            log_event("plan_started", origin=trip.get("origin"), destination=trip.get("destination"), days=trip.get("duration_days"), travelers=trip.get("travelers"))
+            try:
+                state = fresh_state(first, history, trip, ready=True)
+                state["run_id"] = run_id
+                for snapshot in _workflow().stream(state, stream_mode="values"):
+                    final = snapshot
+                    events = snapshot.get("agent_execution_history") or []
+                    for event in events[seen:]:
+                        out.put(("event", event))
+                    seen = len(events)
+                plan = (final or {}).get("final_plan")
+                errors = (final or {}).get("errors") or []
+                log_event(
+                    "plan_completed" if plan else "plan_failed",
+                    level=("warning" if errors else "info") if plan else "error",
+                    duration_ms=round((time.perf_counter() - started) * 1000),
+                    agent_errors=errors,
+                    estimated_cost=(plan or {}).get("estimated_cost"),
+                )
+                out.put(("done", plan))
+            except Exception as exc:  # report, don't hang the browser
+                logger.exception("planning failed")
+                log_event("plan_failed", level="error", duration_ms=round((time.perf_counter() - started) * 1000), error_type=type(exc).__name__, error=str(exc))
+                out.put(("error", f"Planning failed: {exc}"))
 
     def stream():
         # The workflow runs in a thread; while a slow step (e.g. the AI writer) is busy, a small

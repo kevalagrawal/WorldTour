@@ -7,6 +7,7 @@ from typing import Annotated, TypedDict
 
 
 class TravelState(TypedDict, total=False):
+    run_id: str  # ties together every log line of one plan (utils/agent_logs.py)
     original_user_request: str
     parsed_request: dict | None
     constraints: dict
