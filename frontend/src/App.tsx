@@ -172,10 +172,10 @@ function Workspace() {
 
   return (
     <>
-      <main className="mx-auto grid w-full max-w-[110rem] flex-1 lg:grid-cols-[25rem_minmax(0,1fr)] xl:grid-cols-[27.5rem_minmax(0,1fr)]">
+      <main className="mx-auto grid w-full max-w-[110rem] flex-1 grid-cols-1 lg:grid-cols-[25rem_minmax(0,1fr)] xl:grid-cols-[27.5rem_minmax(0,1fr)]">
         <aside
           className={clsx(
-            'min-h-0 border-slate-200/80 lg:sticky lg:top-16 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:border-r dark:border-white/10',
+            'min-h-0 min-w-0 border-slate-200/80 lg:sticky lg:top-16 lg:flex lg:h-[calc(100dvh-4rem)] lg:flex-col lg:border-r dark:border-white/10',
             mobileView === 'chat' ? 'flex h-[calc(100dvh-4rem-4rem)] flex-col' : 'hidden',
           )}
         >

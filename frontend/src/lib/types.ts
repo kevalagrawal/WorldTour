@@ -197,7 +197,7 @@ export interface Plan {
   trip_summary: string
   origin: string | null
   destination: string | null
-  dates: { start_date: string | null; end_date: string | null }
+  dates: { start_date: string | null; end_date: string | null; planned_start?: string | null }
   duration: { days: number | null; nights: number | null }
   travelers: number | null
   pace: string | null

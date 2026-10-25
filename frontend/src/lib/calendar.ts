@@ -37,6 +37,14 @@ function fold(line: string): string {
   return out.join('\r\n')
 }
 
+/**
+ * The day the trip starts: the traveler's date, else the date the planner assumed for flexible
+ * dates (plans saved before planned_start existed fall back to the first forecast day).
+ */
+export function tripStart(plan: Plan): string | null {
+  return plan.dates.start_date || plan.dates.planned_start || plan.daily_itinerary?.find((d) => d.date)?.date || plan.weather_information?.days?.[0]?.date || null
+}
+
 export function tripDays(plan: Plan): number {
   return plan.duration.days || plan.daily_itinerary?.length || 1
 }
@@ -47,6 +55,7 @@ export function planOutline(plan: Plan, { withTimes = true } = {}): string {
   const where = [plan.origin, plan.destination].filter(Boolean).join(' → ')
   if (where) lines.push(where)
   if (plan.dates.start_date) lines.push(`${plan.dates.start_date}${plan.dates.end_date ? ` to ${plan.dates.end_date}` : ''}`)
+  else if (tripStart(plan)) lines.push(`Flexible dates (planned from ${tripStart(plan)})`)
   lines.push(`${plan.travelers || 1} traveler${(plan.travelers || 1) > 1 ? 's' : ''} · ${plan.pace || 'balanced'} pace`)
   for (const day of plan.daily_itinerary ?? []) {
     lines.push('', `Day ${day.day}${day.city ? ` · ${day.city}` : ''}`)
@@ -60,7 +69,7 @@ export function planOutline(plan: Plan, { withTimes = true } = {}): string {
 }
 
 export function icsFile(plan: Plan): string {
-  const start = plan.dates.start_date
+  const start = tripStart(plan)
   if (!start) throw new Error('Add travel dates first')
   const now = new Date()
   const dtstamp = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}00Z`
@@ -113,7 +122,7 @@ export function downloadIcs(plan: Plan) {
 
 /** Google Calendar can't import many events from a link, so it gets one all-day event with the day plan inside. */
 export function googleCalendarUrl(plan: Plan): string {
-  const start = plan.dates.start_date!
+  const start = tripStart(plan)!
   const params = new URLSearchParams({
     action: 'TEMPLATE',
     text: `✈ ${plan.trip_summary}`,
@@ -125,7 +134,7 @@ export function googleCalendarUrl(plan: Plan): string {
 }
 
 export function outlookCalendarUrl(plan: Plan): string {
-  const start = plan.dates.start_date!
+  const start = tripStart(plan)!
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
   const params = new URLSearchParams({
     path: '/calendar/action/compose',

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { CalendarPlus, ChevronDown, Download, ExternalLink as LinkIcon, FileDown, Info, MapPinned, Plane, TrainFront } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { downloadIcs, googleCalendarUrl, outlookCalendarUrl } from '../../lib/calendar'
+import { downloadIcs, googleCalendarUrl, outlookCalendarUrl, tripStart } from '../../lib/calendar'
 import type { Display } from '../../lib/money'
 import { toast } from '../../lib/toast'
 import type { Plan } from '../../lib/types'
@@ -49,7 +49,9 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
           <AddToCalendar plan={plan} />
         </div>
         <p className="mt-2 text-xs text-slate-500">The PDF is an e-ticket style travel document with photos, journey and hotel details, costs and every day's timetable. In the print window, choose “Save as PDF”.</p>
-        {!plan.dates.start_date && <p className="mt-2 text-xs text-slate-500">Tell me your travel dates in the chat to add the trip to your calendar.</p>}
+        {!plan.dates.start_date && tripStart(plan) && (
+          <p className="mt-2 text-xs text-slate-500">Your dates are flexible, so the calendar uses the planned start ({tripStart(plan)}). Tap “Change dates” in the chat to pick yours.</p>
+        )}
       </Card>
 
       <Card className="p-4 lg:col-span-2">
@@ -68,7 +70,7 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
 function AddToCalendar({ plan }: { plan: Plan }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
-  const ready = !!plan.dates.start_date
+  const ready = !!tripStart(plan)
   useEffect(() => {
     if (!open) return
     const onDown = (event: PointerEvent) => box.current && !box.current.contains(event.target as Node) && setOpen(false)

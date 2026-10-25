@@ -6,6 +6,7 @@ from datetime import date, timedelta
 from urllib.parse import quote, urlencode
 
 from worldtour_ai.data.places import lookup_place
+from worldtour_ai.services.request_parser import trip_start
 from worldtour_ai.services.scoring_service import DEFAULT_WEIGHTS, optimization_sentence
 from worldtour_ai.services.transport import AIRPORT_KM, STATION_KM, local_rates
 from worldtour_ai.utils.events import REPLAN_TRIGGERED
@@ -91,7 +92,14 @@ def build_final_plan(state: dict) -> dict:
         "trip_summary": summary,
         "origin": request.get("origin"),
         "destination": destination,
-        "dates": {"start_date": request.get("start_date"), "end_date": request.get("end_date"), "travel_month": request.get("travel_month")},
+        "dates": {
+            "start_date": request.get("start_date"),
+            "end_date": request.get("end_date"),
+            "travel_month": request.get("travel_month"),
+            # The first day the plan was built for, also when the traveler gave no dates (flights,
+            # hotels and weather use it): the calendar export needs a real day to put events on.
+            "planned_start": trip_start(request)[0].isoformat(),
+        },
         "duration": {"days": request.get("duration_days"), "nights": budget.get("nights_used") or request.get("duration_nights")},
         "travelers": request.get("travelers"),
         "pace": request.get("pace"),
