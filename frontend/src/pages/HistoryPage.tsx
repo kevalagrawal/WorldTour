@@ -1,11 +1,13 @@
 import clsx from 'clsx'
-import { Archive, ArchiveRestore, Check, Link2, Pencil, Plus, Repeat, Search, Star, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Pencil, Plus, Repeat, Search, Share2, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Select } from '../components/Select'
+import { ShareDialog } from '../components/ShareDialog'
 import { ConfirmDialog } from '../components/ui'
 import { server, type TripSummary } from '../lib/account'
 import { useStore } from '../store'
-import { ErrorNote, IconButton, Page, Skeleton, TripCard } from './common'
+import { ErrorNote, IconButton, Page, Skeleton, TripCard, tripRoute } from './common'
 
 type Filter = 'active' | 'favorite' | 'planned' | 'planning' | 'archived'
 const FILTERS: { id: Filter; label: string }[] = [
@@ -29,7 +31,7 @@ export function HistoryPage() {
   const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<TripSummary | null>(null)
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [sharing, setSharing] = useState<TripSummary | null>(null)
   const navigate = useNavigate()
   const reset = useStore((s) => s.reset)
 
@@ -68,14 +70,6 @@ export function HistoryPage() {
     setTrips((list) => list.map((t) => (t.id === trip.id ? updated : t)).filter((t) => (filter === 'archived' ? t.status === 'archived' : t.status !== 'archived')))
   }
 
-  const share = async (trip: TripSummary) => {
-    const { share: link } = await server<{ share: { url: string } }>(`/api/trips/${trip.id}/share`, { method: 'POST' })
-    await navigator.clipboard?.writeText(link.url).catch(() => undefined)
-    setTrips((list) => list.map((t) => (t.id === trip.id ? { ...t, shared: true } : t)))
-    setCopied(trip.id)
-    setTimeout(() => setCopied(null), 2500)
-  }
-
   const planAgain = (trip: TripSummary) => {
     reset()
     navigate(`/?q=${encodeURIComponent(trip.firstPrompt)}`)
@@ -97,12 +91,20 @@ export function HistoryPage() {
           <Search size={17} className="text-slate-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by destination, city or what you asked…" aria-label="Search trips" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
         </label>
-        <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort trips" className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium dark:border-white/15 dark:bg-ink-800 dark:text-white">
-          <option value="recent">Recently updated</option>
-          <option value="oldest">Oldest first</option>
-          <option value="budget">Highest budget</option>
-          <option value="name">Name A–Z</option>
-        </select>
+        <div className="md:w-56">
+          <Select
+            value={sort}
+            onChange={setSort}
+            label="Sort trips"
+            className="text-sm dark:bg-ink-800"
+            options={[
+              { value: 'recent', label: 'Recently updated' },
+              { value: 'oldest', label: 'Oldest first' },
+              { value: 'budget', label: 'Highest budget' },
+              { value: 'name', label: 'Name A–Z' },
+            ]}
+          />
+        </div>
       </div>
       <div className="no-scrollbar mb-5 flex gap-2 overflow-x-auto" role="tablist">
         {FILTERS.map((f) => (
@@ -141,8 +143,8 @@ export function HistoryPage() {
                   </IconButton>
                   <IconButton label="Rename" onClick={() => setRenaming({ id: trip.id, title: trip.title })}><Pencil size={15} /></IconButton>
                   {trip.versions > 0 && (
-                    <IconButton label={copied === trip.id ? 'Link copied' : 'Copy share link'} onClick={() => void share(trip)}>
-                      {copied === trip.id ? <Check size={16} className="text-emerald-600" /> : <Link2 size={16} />}
+                    <IconButton label={trip.shared ? 'Shared · manage link' : 'Share'} onClick={() => setSharing(trip)}>
+                      <Share2 size={15} className={trip.shared ? 'text-emerald-600 dark:text-emerald-400' : ''} />
                     </IconButton>
                   )}
                   {trip.firstPrompt && <IconButton label="Plan again from this prompt" onClick={() => planAgain(trip)}><Repeat size={15} /></IconButton>}
@@ -180,6 +182,15 @@ export function HistoryPage() {
           })
         }}
       />
+      {sharing && (
+        <ShareDialog
+          tripId={sharing.id}
+          title={sharing.title}
+          subtitle={tripRoute(sharing)}
+          onClose={() => setSharing(null)}
+          onChange={(shared) => setTrips((list) => list.map((t) => (t.id === sharing.id ? { ...t, shared } : t)))}
+        />
+      )}
       {renaming && (
         <RenameDialog
           title={renaming.title}

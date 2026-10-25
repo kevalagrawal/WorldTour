@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { ArrowLeft, Check, Copy, Eye, Layers, Link2, MessageSquareText, Pencil, Play, Share2, Star, StickyNote, Trash2 } from 'lucide-react'
+import { ArrowLeft, Eye, Layers, MessageSquareText, Pencil, Play, Share2, Star, StickyNote, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { MessageContent } from '../components/MessageContent'
 import { PlanReadOnly } from '../components/plan/readOnly'
+import { ShareDialog } from '../components/ShareDialog'
 import { ConfirmDialog } from '../components/ui'
 import { server, type TripSummary } from '../lib/account'
 import { applySelection, type Selection } from '../lib/selection'
@@ -42,7 +43,7 @@ export function TripPage() {
   const [viewing, setViewing] = useState<{ id: string; number: number; plan: Plan } | null>(null)
   const [notes, setNotes] = useState('')
   const [savedNotes, setSavedNotes] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [renaming, setRenaming] = useState(false)
 
@@ -65,25 +66,6 @@ export function TripPage() {
     const { messages: _count, ...changes } = updated
     void _count
     setTrip((t) => (t ? { ...t, ...changes } : t))
-  }
-
-  const toggleShare = async () => {
-    if (!trip) return
-    if (trip.share.enabled) {
-      const { share } = await server<{ share: TripDetail['share'] }>(`/api/trips/${id}/share`, { method: 'DELETE' })
-      setTrip({ ...trip, share, shared: false })
-    } else {
-      const { share } = await server<{ share: TripDetail['share'] }>(`/api/trips/${id}/share`, { method: 'POST' })
-      setTrip({ ...trip, share, shared: true })
-      await copy(share.url)
-    }
-  }
-
-  const copy = async (url: string | null) => {
-    if (!url) return
-    await navigator.clipboard?.writeText(url).catch(() => undefined)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2500)
   }
 
   const view = async (version: Version) => {
@@ -129,23 +111,14 @@ export function TripPage() {
           <Star size={15} className={trip.favorite ? 'fill-amber-400 text-amber-400' : ''} /> {trip.favorite ? 'Favourite' : 'Add to favourites'}
         </button>
         {trip.versionList.length > 0 && (
-          <button onClick={() => void toggleShare()} className={clsx('inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold', trip.share.enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200')}>
-            <Share2 size={15} /> {trip.share.enabled ? 'Sharing on — turn off' : 'Share a read-only link'}
+          <button onClick={() => setSharing(true)} className={clsx('inline-flex h-10 items-center gap-2 rounded-lg border px-4 text-sm font-semibold', trip.share.enabled ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-white/15 dark:bg-ink-800 dark:text-slate-200')}>
+            <Share2 size={15} /> {trip.share.enabled ? 'Shared · manage link' : 'Share'}
           </button>
         )}
         <button onClick={() => setRemoving(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-white/15 dark:bg-ink-800">
           <Trash2 size={15} /> Delete
         </button>
       </div>
-
-      {trip.share.enabled && trip.share.url && (
-        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-100">
-          <Link2 size={16} /> <span className="min-w-0 flex-1 truncate font-mono text-xs">{trip.share.url}</span>
-          <button onClick={() => void copy(trip.share.url)} className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 shadow-sm dark:bg-white/10 dark:text-white">
-            {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? 'Copied' : 'Copy link'}
-          </button>
-        </div>
-      )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="min-w-0 space-y-5" id="trip-plan">
@@ -243,6 +216,15 @@ export function TripPage() {
           })
         }}
       />
+      {sharing && (
+        <ShareDialog
+          tripId={trip.id}
+          title={trip.title}
+          subtitle={tripRoute(trip)}
+          onClose={() => setSharing(false)}
+          onChange={(enabled) => setTrip((t) => (t ? { ...t, shared: enabled, share: { ...t.share, enabled } } : t))}
+        />
+      )}
       {renaming && <RenameDialog title={trip.title} onCancel={() => setRenaming(false)} onSave={(title) => { setRenaming(false); void patch({ title }) }} />}
     </Page>
   )

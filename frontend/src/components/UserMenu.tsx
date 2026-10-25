@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { ACCOUNTS_ENABLED, initials, useAccount, useSession } from '../lib/account'
 import { LANGUAGES } from '../lib/i18n'
+import { toast } from '../lib/toast'
 import { useStore } from '../store'
 
 /** The signed-in traveler's photo, or their initials. */
@@ -132,7 +133,13 @@ function SignedInMenu() {
               onClick={() => {
                 // Leave account pages before signing out, or their sign-in guard bounces to /sign-in.
                 navigate('/')
-                void signOut({ redirectUrl: '/' }).then(() => useAccount.getState().clear())
+                const name = useAccount.getState().profile?.fullName?.split(/\s+/)[0]
+                void signOut({ redirectUrl: '/' })
+                  .then(() => {
+                    useAccount.getState().clear()
+                    toast.success(name ? `Signed out. See you soon, ${name}!` : 'You have been signed out.')
+                  })
+                  .catch(() => toast.error('Could not sign out. Please try again.'))
               }}
               className={clsx(item, 'text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10')}
             >

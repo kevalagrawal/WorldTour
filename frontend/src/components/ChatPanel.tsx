@@ -5,6 +5,7 @@ import { useActivePlan, useStore } from '../store'
 import { Composer } from './Composer'
 import { DatePicker } from './DatePicker'
 import { MessageContent } from './MessageContent'
+import { Select } from './Select'
 import { LANGUAGES, packageLabel, speechCode, t, WELCOMES, type Lang } from '../lib/i18n'
 import { useProgress } from '../lib/progress'
 import { hasVoice, speak, stopSpeaking, useVoicesReady } from '../lib/voice'
@@ -131,21 +132,21 @@ export function ChatPanel() {
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <label className="sr-only" htmlFor="chat-language">{say('language')}</label>
-          <select
-            id="chat-language"
-            value={lang}
-            onChange={(event) => {
-              stopSpeaking()
-              setLanguage(event.target.value as Lang)
-            }}
-            title={say('language')}
-            className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-semibold text-slate-700 outline-none transition hover:border-brand-300 focus:border-brand-500 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200"
-          >
-            {LANGUAGES.map((item) => (
-              <option key={item.code} value={item.code}>{item.label}</option>
-            ))}
-          </select>
+          <div className="w-[92px]">
+            <Select<Lang>
+              id="chat-language"
+              size="sm"
+              align="right"
+              menuWidth={150}
+              label={say('language')}
+              value={lang}
+              onChange={(value) => {
+                stopSpeaking()
+                setLanguage(value)
+              }}
+              options={LANGUAGES.map((item) => ({ value: item.code, label: item.label }))}
+            />
+          </div>
           <button
             onClick={toggleReadAloud}
             aria-pressed={readAloud}

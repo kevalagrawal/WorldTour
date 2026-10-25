@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import { CalendarDays, Check, Copy, FileDown, LayoutDashboard, ListChecks, Luggage, PieChart, PiggyBank, RotateCcw, SlidersHorizontal, Users, Wallet } from 'lucide-react'
+import { CalendarDays, Check, Copy, FileDown, LayoutDashboard, ListChecks, Luggage, PieChart, PiggyBank, RotateCcw, Share2, SlidersHorizontal, Users, Wallet } from 'lucide-react'
 import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { useSession } from '../../lib/account'
 import { exportText } from '../../lib/api'
 import { useWikiImage } from '../../lib/images'
 import { formatLocal, formatMoney, prettyDate, type Display } from '../../lib/money'
 import type { Plan } from '../../lib/types'
 import { useStore } from '../../store'
 import { usePlanAction, usePlanReadOnly } from './readOnly'
+import { ShareDialog } from '../ShareDialog'
 import { Stat } from '../ui'
 import { BookExport } from './BookExport'
 import { Costs } from './Costs'
@@ -27,7 +29,12 @@ export function PlanView({ plan }: { plan: Plan }) {
   const [tab, setTab] = useState<Tab>('overview')
   const [copied, setCopied] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [sharing, setSharing] = useState(false)
   const readOnly = usePlanReadOnly()
+  const { signedIn } = useSession()
+  // Signed-in trips are saved automatically; once saved, the planner can share them too.
+  const tripId = useStore((s) => s.tripId)
+  const canShare = signedIn && !!tripId && !readOnly
   const customised = useStore((s) => s.selection !== null) && !readOnly
   const resetSelection = usePlanAction('resetSelection')
   const display: Display = { currency: plan.display_currency || 'USD', rate: plan.usd_to_display || 1 }
@@ -73,6 +80,11 @@ export function PlanView({ plan }: { plan: Plan }) {
             </div>
           </div>
           <div className="no-print flex gap-2">
+            {canShare && (
+              <button onClick={() => setSharing(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-3 text-sm font-semibold backdrop-blur transition hover:bg-white/20">
+                <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
+              </button>
+            )}
             <button onClick={() => void copySummary()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/25 bg-white/10 px-3 text-sm font-semibold backdrop-blur transition hover:bg-white/20">
               {copied ? <Check size={15} /> : <Copy size={15} />} <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy summary'}</span>
             </button>
@@ -86,6 +98,10 @@ export function PlanView({ plan }: { plan: Plan }) {
           </div>
         </div>
       </div>
+
+      {sharing && tripId && (
+        <ShareDialog tripId={tripId} title={plan.trip_summary} subtitle={[plan.origin, plan.destination].filter(Boolean).join(' → ')} onClose={() => setSharing(false)} />
+      )}
 
       {customised && (
         <div className="no-print flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2.5 text-sm text-brand-900 dark:border-brand-400/30 dark:bg-brand-500/10 dark:text-brand-100">

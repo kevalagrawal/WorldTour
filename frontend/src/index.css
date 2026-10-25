@@ -161,3 +161,35 @@ html::-webkit-scrollbar,
     print-color-adjust: exact;
   }
 }
+
+/* Pop-up notifications (react-toastify), in the site's colours and type. */
+:root {
+  --toastify-font-family: var(--font-sans);
+  --toastify-color-light: #ffffff;
+  --toastify-color-dark: var(--color-ink-700);
+  --toastify-text-color-light: #1e293b;
+  --toastify-text-color-dark: #f1f5f9;
+  --toastify-color-info: var(--color-brand-600);
+  --toastify-color-success: #059669;
+  --toastify-color-warning: var(--color-coral-500);
+  --toastify-color-error: #e11d48;
+  --toastify-color-progress-light: var(--color-brand-500);
+  --toastify-color-progress-dark: var(--color-brand-300);
+  --toastify-toast-bd-radius: 14px;
+  --toastify-toast-min-height: 56px;
+  --toastify-z-index: 4000;
+}
+.Toastify__toast {
+  border: 1px solid rgb(226 232 240);
+  box-shadow: var(--shadow-lift);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 12px 14px;
+}
+.Toastify__toast-theme--dark {
+  border-color: rgb(255 255 255 / 0.1);
+}
+.Toastify__progress-bar--wrp {
+  height: 3px;
+}

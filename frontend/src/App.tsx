@@ -10,6 +10,7 @@ import { PlanningProgress } from './components/PlanningProgress'
 import { TripBrief } from './components/TripBrief'
 import { ACCOUNTS_ENABLED, useAccount, useSession } from './lib/account'
 import { health } from './lib/api'
+import { Toaster } from './lib/toast'
 import { useTripSync } from './lib/tripSync'
 import { useActivePlan, useStarted, useStore } from './store'
 
@@ -57,6 +58,7 @@ export default function App() {
         </Routes>
       </Suspense>
       {needsAccessCode && <AccessCode />}
+      <Toaster />
     </div>
   )
 }

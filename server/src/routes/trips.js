@@ -196,6 +196,13 @@ export function tripRoutes({ identity }) {
     res.json({ deleted: true })
   })
 
+  /** Whether the trip is shared, and its link (the share dialog opens with this). */
+  router.get('/:id/share', async (req, res) => {
+    const trip = await own(req)
+    const enabled = !!(trip.share?.enabled && trip.share.id)
+    res.json({ share: { enabled, url: enabled ? `${config.appUrl}/share/${trip.share.id}` : null, canShare: trip.versions.length > 0 } })
+  })
+
   router.post('/:id/share', async (req, res) => {
     const trip = await own(req)
     if (!trip.versions.length) throw new HttpError(400, 'Plan the trip first, then share it.')

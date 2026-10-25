@@ -186,8 +186,12 @@ describe('trips', () => {
   })
 
   test('sharing: a public read-only link that can be turned off', async () => {
+    const before = await alice.get(`/api/trips/${tripId}/share`)
+    assert.deepEqual(before.body.share, { enabled: false, url: null, canShare: true })
+    assert.equal((await bob.get(`/api/trips/${tripId}/share`)).status, 404)
     const on = await alice.post(`/api/trips/${tripId}/share`)
     assert.equal(on.status, 200)
+    assert.equal((await alice.get(`/api/trips/${tripId}/share`)).body.share.url, on.body.share.url)
     const shareId = on.body.share.url.split('/share/')[1]
     let pub = await request(app).get(`/api/share/${shareId}`)
     assert.equal(pub.status, 200)
@@ -197,6 +201,9 @@ describe('trips', () => {
     await alice.delete(`/api/trips/${tripId}/share`)
     pub = await request(app).get(`/api/share/${shareId}`)
     assert.equal(pub.status, 404)
+    // Sharing again brings back the same link, so links sent earlier work again.
+    assert.equal((await alice.post(`/api/trips/${tripId}/share`)).body.share.url, on.body.share.url)
+    await alice.delete(`/api/trips/${tripId}/share`)
   })
 
   test('stats for the profile page', async () => {

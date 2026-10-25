@@ -1,13 +1,15 @@
 import { useClerk, useUser } from '@clerk/clerk-react'
 import clsx from 'clsx'
-import { AlertTriangle, Check, KeyRound, Laptop, Loader2, LogOut, Mail, Smartphone, Trash2, UserRound, Wrench } from 'lucide-react'
+import { AlertTriangle, Check, KeyRound, Laptop, Loader2, LogOut, Mail, Moon, Smartphone, Sun, Trash2, UserRound, Wrench } from 'lucide-react'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { PhotoCropper } from '../components/PhotoCropper'
+import { Select } from '../components/Select'
 import { ConfirmDialog } from '../components/ui'
 import { Avatar } from '../components/UserMenu'
 import { server, useAccount, type Preferences, type Profile } from '../lib/account'
 import { LANGUAGES } from '../lib/i18n'
+import { toast } from '../lib/toast'
 import { useStore } from '../store'
 import { Page, Panel } from './common'
 
@@ -208,22 +210,29 @@ function PreferencesTab() {
           <datalist id="home-cities">{CITIES.map((c) => <option key={c} value={c} />)}</datalist>
         </Label>
         <Label text="Show prices in" hint="Unless your message names a currency.">
-          <select value={prefs.currency} onChange={(e) => set('currency', e.target.value)} className={input}>
-            <option value="">Automatic (from where you start)</option>
-            {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <Select
+            value={prefs.currency}
+            onChange={(value) => set('currency', value)}
+            options={[{ value: '', label: 'Automatic (from where you start)' }, ...CURRENCIES.map((c) => ({ value: c, label: c }))]}
+          />
         </Label>
         <Label text="Chat language">
-          <select value={prefs.language} onChange={(e) => set('language', e.target.value as Preferences['language'])} className={input}>
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-          </select>
+          <Select
+            value={prefs.language}
+            onChange={(value) => set('language', value)}
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+          />
         </Label>
         <Label text="Theme">
-          <select value={prefs.theme} onChange={(e) => set('theme', e.target.value as Preferences['theme'])} className={input}>
-            <option value="system">Same as my device</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+          <Select<Preferences['theme']>
+            value={prefs.theme}
+            onChange={(value) => set('theme', value)}
+            options={[
+              { value: 'system', label: 'Same as my device', icon: <Laptop size={15} className="text-slate-400" /> },
+              { value: 'light', label: 'Light', icon: <Sun size={15} className="text-slate-400" /> },
+              { value: 'dark', label: 'Dark', icon: <Moon size={15} className="text-slate-400" /> },
+            ]}
+          />
         </Label>
         <label className="flex items-center gap-3 sm:col-span-2">
           <input type="checkbox" checked={prefs.readAloud} onChange={(e) => set('readAloud', e.target.checked)} className="h-5 w-5 accent-brand-700" />
@@ -403,6 +412,7 @@ function AccountTab() {
       // Leave the account pages first: signing out while still here would bounce to the sign-in page.
       navigate('/', { replace: true })
       await signOut({ redirectUrl: '/' }).catch(() => undefined)
+      toast.success('Your account and all its trips were deleted.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The account could not be deleted.')
       setBusy(false)
