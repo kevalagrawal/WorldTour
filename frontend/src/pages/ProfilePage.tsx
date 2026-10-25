@@ -56,8 +56,8 @@ export function ProfilePage() {
             )}
           </div>
           <div className="relative px-4 pb-5 sm:px-6">
-            <div className="-mt-12 flex flex-col items-center gap-4 text-center sm:-mt-10 sm:flex-row sm:items-end sm:text-left">
-              <div className="animate-pop rounded-full bg-white p-1 shadow-lift dark:bg-ink-800">
+            <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:text-left">
+              <div className="-mt-14 shrink-0 animate-pop rounded-full bg-white p-1 shadow-lift dark:bg-ink-800">
                 <Avatar size={104} />
               </div>
               <div className="min-w-0 flex-1 sm:pb-1">
