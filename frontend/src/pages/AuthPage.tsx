@@ -33,7 +33,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
   const { loaded, signedIn } = useSession()
   const [params] = useSearchParams()
   const redirect = params.get('redirect') || '/'
-  const photos = [useWikiImage(['Lake Palace'], 1280), useWikiImage(['Santorini'], 1280), useWikiImage(['Kerala backwaters'], 1280)]
+  const photos = [useWikiImage(['Lake Palace'], 1280), useWikiImage(['Taj Mahal'], 1280), useWikiImage(['Kerala backwaters'], 1280)]
 
   if (!ACCOUNTS_ENABLED) {
     return (
@@ -61,7 +61,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
 
 const SLIDES = [
   { place: 'Udaipur, India', line: 'Lake palaces, planned hour by hour.' },
-  { place: 'Santorini, Greece', line: 'Flights, hotels and days in one plan.' },
+  { place: 'Agra, India', line: 'Flights, trains, hotels and days in one plan.' },
   { place: 'Kerala, India', line: 'Slow backwaters at your own pace.' },
 ]
 
