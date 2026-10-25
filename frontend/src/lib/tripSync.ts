@@ -2,7 +2,7 @@
 // generated itinerary (the server keeps each new plan as a version) and their package/flight/hotel picks.
 // Guests are not saved; a trip planned as a guest is saved as soon as they sign in.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { server, ServerError, useSession } from './account'
 
@@ -19,6 +19,9 @@ export function useTripSync(): void {
   const setTripId = useStore((s) => s.setTripId)
   const creating = useRef(false)
   const lastSent = useRef('')
+  // A failed save (cold server, network blip) is retried a few times instead of waiting for the next change.
+  const [attempt, setAttempt] = useState(0)
+  const failures = useRef(0)
 
   useEffect(() => {
     if (!enabled || !signedIn || status !== 'idle') return
@@ -43,13 +46,18 @@ export function useTripSync(): void {
           await server(`/api/trips/${tripId}/sync`, { method: 'PUT', body })
         }
         lastSent.current = key
+        failures.current = 0
       } catch (error) {
         // A trip deleted from History while still open here: start a fresh saved trip next time.
         if (error instanceof ServerError && error.status === 404) setTripId(null)
+        else if (!(error instanceof ServerError && error.status === 401) && failures.current < 5) {
+          failures.current += 1
+          setTimeout(() => setAttempt((n) => n + 1), 3000 * failures.current)
+        }
       } finally {
         creating.current = false
       }
     }, DELAY_MS)
     return () => clearTimeout(timer)
-  }, [enabled, signedIn, status, messages, session, plan, selection, tripId, setTripId])
+  }, [enabled, signedIn, status, messages, session, plan, selection, tripId, setTripId, attempt])
 }
