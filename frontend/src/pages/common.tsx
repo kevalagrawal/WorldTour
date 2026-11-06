@@ -76,9 +76,9 @@ export function TripCard({ trip, actions }: { trip: TripSummary; actions?: React
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="truncate text-base font-bold text-slate-900 dark:text-white">{trip.title}</h3>
           {trip.favorite && <Star size={14} className="fill-amber-400 text-amber-400" aria-label="Favourite" />}
-          {trip.shared && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"><Share2 size={11} /> Shared</span>}
-          {trip.status === 'archived' && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>}
-          {trip.status === 'planning' && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Not planned yet</span>}
+          {trip.shared && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"><Share2 size={11} /> Shared</span>}
+          {trip.status === 'archived' && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 dark:bg-white/10 dark:text-slate-300">Archived</span>}
+          {trip.status === 'planning' && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Not planned yet</span>}
         </div>
         <div className="mt-0.5 truncate text-sm text-slate-600 dark:text-slate-300">{tripRoute(trip)}</div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
@@ -92,7 +92,7 @@ export function TripCard({ trip, actions }: { trip: TripSummary; actions?: React
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 sm:flex-col sm:flex-nowrap sm:items-end sm:border-0 sm:pt-0 dark:border-white/5">
         <div className="text-right">
           <div className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">{money(trip.estimatedCost, trip.currency)}</div>
-          {trip.estimatedCost != null && <div className="text-[11px] text-slate-500">estimated total</div>}
+          {trip.estimatedCost != null && <div className="text-xs text-slate-500">estimated total</div>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-1">{actions}</div>}
       </div>

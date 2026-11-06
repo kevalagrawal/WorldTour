@@ -117,12 +117,12 @@ export function TripPage() {
       title={
         <span className="flex items-center gap-2">
           <span className="truncate">{trip.title}</span>
-          <button onClick={() => setRenaming(true)} aria-label="Rename trip" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"><Pencil size={17} /></button>
+          <button onClick={() => setRenaming(true)} aria-label="Rename trip" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10"><Pencil size={17} /></button>
         </span>
       }
       subtitle={`${tripRoute(trip)} · ${trip.startDate ? new Date(`${trip.startDate}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'flexible dates'} · updated ${ago(trip.updatedAt)}`}
       action={
-        <Link to="/history" className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"><ArrowLeft size={15} /> All trips</Link>
+        <Link to="/history" className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"><ArrowLeft size={15} /> All trips</Link>
       }
     >
       <div className="mb-5 flex flex-wrap gap-2">
@@ -213,7 +213,7 @@ export function TripPage() {
                 <div key={i} className={clsx('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
                   <div className={clsx('max-w-[90%] rounded-xl px-3 py-2 text-sm leading-relaxed', m.role === 'user' ? 'bg-brand-700 text-white' : 'bg-slate-100 text-slate-800 dark:bg-white/5 dark:text-slate-100')}>
                     {m.role === 'user' ? m.content : <MessageContent text={m.content} />}
-                    <div className={clsx('mt-1 text-[10px]', m.role === 'user' ? 'text-white/70' : 'text-slate-400')}>{ago(m.at)}</div>
+                    <div className={clsx('mt-1 text-[11px]', m.role === 'user' ? 'text-white/70' : 'text-slate-400')}>{ago(m.at)}</div>
                   </div>
                 </div>
               ))}

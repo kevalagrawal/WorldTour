@@ -118,7 +118,7 @@ export function ProfilePage() {
                 ) : data.recent.length ? (
                   <div className="stagger space-y-3">
                     {data.recent.map((trip) => <TripCard key={trip.id} trip={trip} />)}
-                    <Link to="/history" className="inline-block pt-1 text-sm font-semibold text-brand-700 hover:underline dark:text-brand-300">See all your trips →</Link>
+                    <Link to="/history" className="inline-flex min-h-10 items-center text-sm font-semibold text-brand-700 hover:underline dark:text-brand-300">See all your trips →</Link>
                   </div>
                 ) : (
                   <EmptyTrips />
@@ -156,7 +156,7 @@ function Stat({ icon, label, value, tone }: { icon: ReactNode; label: string; va
 function MiniStat({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{icon} {label}</div>
+      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">{icon} {label}</div>
       <div className="mt-0.5 truncate text-base font-bold tabular-nums text-slate-900 dark:text-white">{value ?? '—'}</div>
     </div>
   )
@@ -212,7 +212,7 @@ function Completeness({ profile, planned }: { profile: Profile | null; planned: 
         <ul className="min-w-0 flex-1 space-y-1.5 text-sm">
           {steps.map((s) => (
             <li key={s.label}>
-              <Link to={s.to} className={clsx('flex items-center gap-2 rounded-md transition', s.done ? 'text-slate-400 line-through decoration-slate-300' : 'font-medium text-slate-700 hover:text-brand-700 dark:text-slate-200 dark:hover:text-brand-300')}>
+              <Link to={s.to} className={clsx('flex min-h-9 items-center gap-2 rounded-md transition', s.done ? 'text-slate-400 line-through decoration-slate-300' : 'font-medium text-slate-700 hover:text-brand-700 dark:text-slate-200 dark:hover:text-brand-300')}>
                 <span className={clsx('grid h-4 w-4 shrink-0 place-items-center rounded-full', s.done ? 'bg-emerald-500 text-white' : 'border border-slate-300 dark:border-white/20')}>{s.done && <Check size={10} strokeWidth={3} />}</span>
                 <span className="truncate">{s.label}</span>
               </Link>
@@ -262,7 +262,7 @@ function Achievements({ stats, next }: { stats?: Stats; next: number | null }) {
           <div
             key={b.label}
             title={b.done ? 'Unlocked' : 'Locked'}
-            className={clsx('flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center text-[11px] font-semibold leading-tight transition', b.done ? 'border-coral-100 bg-coral-50 text-coral-600 dark:border-coral-400/30 dark:bg-coral-500/10 dark:text-coral-400' : 'border-slate-200 text-slate-400 dark:border-white/10')}
+            className={clsx('flex flex-col items-center gap-1.5 rounded-xl border p-2.5 text-center text-xs font-semibold leading-tight transition', b.done ? 'border-coral-100 bg-coral-50 text-coral-600 dark:border-coral-400/30 dark:bg-coral-500/10 dark:text-coral-400' : 'border-slate-200 text-slate-400 dark:border-white/10')}
           >
             <span className={clsx('grid h-8 w-8 place-items-center rounded-full', b.done ? 'animate-pop bg-coral-500 text-white' : 'bg-slate-100 dark:bg-white/5')}>{b.done ? b.icon : <Lock size={13} />}</span>
             {b.label}

@@ -107,7 +107,7 @@ export function PreferencesSetup() {
               ))}
             </div>
             <span className="shrink-0 text-xs font-semibold text-slate-500">Step {step + 1} of 3</span>
-            <button onClick={() => void skip()} className="shrink-0 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">Skip</button>
+            <button onClick={() => void skip()} className="-mr-2 h-10 shrink-0 rounded-lg px-3 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">Skip</button>
           </div>
         )}
 

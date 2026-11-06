@@ -41,7 +41,7 @@ export function PhotoSetup() {
         <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{firstName ? `Welcome, ${firstName}!` : 'Welcome to WorldTour!'}</h1>
         <p className="mx-auto mb-6 mt-1.5 max-w-sm text-sm text-slate-600 dark:text-slate-300">Add a profile photo so your trips and shared plans feel like yours. You can change it any time in Settings.</p>
         <PhotoCropper saveLabel="Save and continue" onSaved={() => navigate(next, { replace: true })} />
-        <button onClick={() => void skip()} disabled={skipping} className="mt-5 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">
+        <button onClick={() => void skip()} disabled={skipping} className="mt-4 h-10 rounded-lg px-4 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">
           Skip for now
         </button>
       </div>

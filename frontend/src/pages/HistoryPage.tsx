@@ -157,7 +157,7 @@ export function HistoryPage() {
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
         <label className="flex h-11 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 transition focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/15 dark:border-white/15 dark:bg-ink-800">
           <Search size={17} className="text-slate-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by destination, city or what you asked…" aria-label="Search trips" className="h-full min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by destination, city or what you asked…" aria-label="Search trips" className="h-full min-w-0 self-stretch flex-1 bg-transparent text-sm outline-none dark:text-white" />
           {search && <button onClick={() => setSearch('')} aria-label="Clear search" className="rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-white"><X size={15} /></button>}
         </label>
         <div className="md:w-56">
