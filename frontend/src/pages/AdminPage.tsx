@@ -134,13 +134,17 @@ export function AdminPage() {
   const [session, setSession] = useState(loadSession)
 
   useEffect(() => {
-    // Keep this page out of search engines.
-    const meta = Object.assign(document.createElement('meta'), { name: 'robots', content: 'noindex, nofollow' })
-    document.head.appendChild(meta)
+    // Keep this page out of search engines (the site's own robots tag says "index").
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="robots"]')
+    const created = !meta
+    meta ??= document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'robots' }))
+    const previous = meta.content
+    meta.content = 'noindex, nofollow'
     const title = document.title
     document.title = 'Admin · WorldTour'
     return () => {
-      meta.remove()
+      if (created) meta.remove()
+      else meta.content = previous
       document.title = title
     }
   }, [])

@@ -112,8 +112,9 @@ export function adminRoutes() {
   })
 
   router.get('/overview', async (_req, res) => {
+    // Days are UTC days, the same as the $dateToString keys below.
     const since = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000)
-    since.setHours(0, 0, 0, 0)
+    since.setUTCHours(0, 0, 0, 0)
     const week = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     const day = { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
     const [users, active, onboarded, tripTotals, signups, tripsByDay, destinations, recentUsers] = await Promise.all([
