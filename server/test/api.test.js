@@ -23,6 +23,7 @@ before(async () => {
   process.env.CLERK_WEBHOOK_SIGNING_SECRET = WEBHOOK_SECRET
   process.env.CLOUDINARY_FOLDER = 'worldtour/avatars'
   process.env.APP_URL = 'https://worldtour-xi.vercel.app'
+  process.env.ADMIN_CODE = 'test-admin-246810'
   ;({ Webhook } = await import('svix'))
   const { createApp } = await import('../src/app.js')
   ;({ disconnectDatabase: disconnect } = await import('../src/db.js'))
@@ -114,7 +115,7 @@ describe('accounts', () => {
       .patch('/api/me')
       .send({ fullName: 'Alice R Sharma', phone: '+91 90000 11111', preferences: { homeCity: 'Pune', currency: 'inr', language: 'gu', theme: 'dark', readAloud: true } })
     assert.equal(res.status, 200)
-    assert.deepEqual(res.body.user.preferences, { homeCity: 'Pune', currency: 'INR', language: 'gu', theme: 'dark', readAloud: true })
+    assert.deepEqual(res.body.user.preferences, { homeCity: 'Pune', currency: 'INR', language: 'gu', theme: 'dark', readAloud: true, interests: [], travelParty: '', travelStyle: '' })
     assert.deepEqual(calls.updateUser.at(-1), { id: 'user_alice', data: { firstName: 'Alice', lastName: 'R Sharma' } })
   })
 
@@ -218,6 +219,62 @@ describe('trips', () => {
     assert.equal(res.body.stats.places.length, 2)
     assert.equal(res.body.stats.activity.length, 6)
     assert.equal(res.body.stats.activity.at(-1).trips, 2)
+  })
+})
+
+describe('sign-up questions', () => {
+  test('interests, travel party and style are saved with the survey flag', async () => {
+    const alice = as('user_alice')
+    const bad = await alice.patch('/api/me').send({ preferences: { interests: ['skydiving'] } })
+    assert.equal(bad.status, 400)
+    const res = await alice.patch('/api/me').send({ surveyDone: true, preferences: { interests: ['beaches', 'food'], travelParty: 'couple', travelStyle: 'premium' } })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.user.surveyDone, true)
+    assert.deepEqual(res.body.user.preferences.interests, ['beaches', 'food'])
+    assert.equal(res.body.user.preferences.travelParty, 'couple')
+    assert.equal(res.body.user.preferences.travelStyle, 'premium')
+  })
+})
+
+describe('admin dashboard', () => {
+  let token
+  const admin = (path) => request(app).get(path).set('Authorization', `Admin ${token}`)
+
+  test('the right code opens a session; nothing works without it', async () => {
+    assert.equal((await request(app).get('/api/admin/overview')).status, 401)
+    const ok = await request(app).post('/api/admin/session').send({ code: 'test-admin-246810' })
+    assert.equal(ok.status, 200)
+    token = ok.body.token
+    assert.ok(new Date(ok.body.expiresAt) > new Date())
+    const [payload, signature] = token.split('.')
+    const forged = Buffer.from(JSON.stringify({ role: 'admin', exp: Date.now() + 1e9 })).toString('base64url')
+    assert.equal((await request(app).get('/api/admin/overview').set('Authorization', `Admin ${forged}.${signature}`)).status, 401)
+    assert.ok(payload)
+  })
+
+  test('overview, user list with search, one user and one trip', async () => {
+    const overview = await admin('/api/admin/overview')
+    assert.equal(overview.status, 200)
+    assert.equal(overview.body.totals.users, 2)
+    assert.equal(overview.body.totals.trips, 2)
+    assert.equal(overview.body.signups.length, 30)
+    const list = await admin('/api/admin/users?search=alice')
+    assert.equal(list.body.total, 1)
+    assert.equal(list.body.users[0].trips, 2)
+    const user = await admin(`/api/admin/users/${list.body.users[0].id}`)
+    assert.equal(user.body.user.email, 'alice@example.com')
+    assert.equal(user.body.trips.length, 2)
+    const trip = await admin(`/api/admin/trips/${user.body.trips[0].id}`)
+    assert.equal(trip.status, 200)
+    assert.ok(trip.body.trip.messages.length > 0)
+    assert.ok(trip.body.trip.versions.length > 0)
+    assert.equal((await admin('/api/admin/users/not-an-id')).status, 404)
+  })
+
+  test('wrong codes are refused and locked out after 5 tries', async () => {
+    const statuses = []
+    for (let i = 0; i < 6; i++) statuses.push((await request(app).post('/api/admin/session').send({ code: `000000${i}` })).status)
+    assert.deepEqual(statuses, [401, 401, 401, 401, 401, 429])
   })
 })
 

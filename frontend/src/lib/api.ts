@@ -88,8 +88,9 @@ export async function health(): Promise<{ status: string; access_code_required: 
 }
 
 /** A signed-in traveler's saved home city and currency, sent with chat messages as defaults. */
-let chatDefaults: { home_city?: string; currency?: string } = {}
-export function setChatDefaults(defaults: { home_city?: string; currency?: string }) {
+type ChatDefaults = { home_city?: string; currency?: string; interests?: string[]; travel_party?: string; travel_style?: string }
+let chatDefaults: ChatDefaults = {}
+export function setChatDefaults(defaults: ChatDefaults) {
   chatDefaults = defaults
 }
 

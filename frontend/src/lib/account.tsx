@@ -11,12 +11,20 @@ export const CLERK_KEY = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string |
 export const SERVER_URL = ((import.meta.env.VITE_SERVER_URL as string | undefined) ?? '').trim().replace(/\/$/, '')
 export const ACCOUNTS_ENABLED = !!CLERK_KEY && !!SERVER_URL
 
+export type Interest = 'beaches' | 'mountains' | 'heritage' | 'food' | 'adventure' | 'nature' | 'spiritual' | 'nightlife'
+export type TravelParty = '' | 'solo' | 'couple' | 'family' | 'friends'
+export type TravelStyle = '' | 'budget' | 'balanced' | 'premium'
+
 export interface Preferences {
   homeCity: string
   currency: string
   language: Lang
   theme: 'system' | 'light' | 'dark'
   readAloud: boolean
+  /** The three questions after sign-up. */
+  interests: Interest[]
+  travelParty: TravelParty
+  travelStyle: TravelStyle
 }
 
 export interface Profile {
@@ -26,6 +34,7 @@ export interface Profile {
   phone: string
   photoUrl: string
   onboarded: boolean
+  surveyDone: boolean
   preferences: Preferences
   memberSince: string
 }
@@ -184,7 +193,17 @@ useAccount.subscribe((state, previous) => {
 // The chat uses the saved home city and currency as defaults (see ai/ ChatBody).
 useAccount.subscribe((state) => {
   const prefs = state.profile?.preferences
-  setChatDefaults(prefs ? { home_city: prefs.homeCity || undefined, currency: prefs.currency || undefined } : {})
+  setChatDefaults(
+    prefs
+      ? {
+          home_city: prefs.homeCity || undefined,
+          currency: prefs.currency || undefined,
+          interests: prefs.interests?.length ? prefs.interests : undefined,
+          travel_party: prefs.travelParty || undefined,
+          travel_style: prefs.travelStyle || undefined,
+        }
+      : {},
+  )
 })
 
 /** Initials for an avatar without a photo. */

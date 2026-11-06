@@ -84,6 +84,10 @@ class ChatBody(BaseModel):
     # A signed-in traveler's saved settings: home city (start point) and display currency.
     home_city: str | None = None
     currency: str | None = None
+    # From the three questions after sign-up; used only when the message itself doesn't say.
+    interests: list[str] | None = None
+    travel_party: str | None = None
+    travel_style: str | None = None
 
 
 class PlanBody(BaseModel):
@@ -156,7 +160,13 @@ def chat(body: ChatBody, request: Request) -> dict:
     try:
         started = time.perf_counter()
         language = body.language if body.language in LANGUAGES else "en"
-        defaults = {"home_city": (body.home_city or "")[:80], "currency": (body.currency or "")[:3]}
+        defaults = {
+            "home_city": (body.home_city or "")[:80],
+            "currency": (body.currency or "")[:3],
+            "interests": [str(item)[:20] for item in (body.interests or [])[:8]],
+            "travel_party": (body.travel_party or "")[:10],
+            "travel_style": (body.travel_style or "")[:10],
+        }
         result = chat_step(body.session, to_english(body.message[:2000], language), defaults=defaults)
         if language != "en":
             result["reply_en"] = result["reply"]

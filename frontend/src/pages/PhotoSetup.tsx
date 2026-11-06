@@ -8,7 +8,9 @@ import { server, useAccount, type Profile } from '../lib/account'
 export function PhotoSetup() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('redirect') || '/'
+  const after = params.get('redirect') || '/'
+  // Next comes the three-question travel profile, then wherever the traveler was going.
+  const next = `/onboarding/preferences${after !== '/' ? `?redirect=${encodeURIComponent(after)}` : ''}`
   const profile = useAccount((s) => s.profile)
   const setProfile = useAccount((s) => s.setProfile)
   const [skipping, setSkipping] = useState(false)

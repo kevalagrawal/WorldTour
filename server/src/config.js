@@ -23,6 +23,8 @@ export const config = {
   },
   allowedOrigins: list(process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:4173'),
   appUrl: (process.env.APP_URL || 'https://worldtour-xi.vercel.app').replace(/\/$/, ''),
+  // Opens the private /admin dashboard. Empty = dashboard switched off. Never sent to the browser.
+  adminCode: String(process.env.ADMIN_CODE || '').trim(),
   // Limits that keep one trip document well under MongoDB's 16 MB.
   maxMessages: 400,
   maxVersions: 15,
@@ -33,4 +35,5 @@ export const configured = {
   clerk: () => !!config.clerk.secretKey && !!config.clerk.publishableKey,
   webhook: () => !!config.clerk.webhookSecret,
   cloudinary: () => !!(config.cloudinary.cloudName && config.cloudinary.apiKey && config.cloudinary.apiSecret),
+  admin: () => config.adminCode.length >= 6,
 }

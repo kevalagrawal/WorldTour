@@ -10,6 +10,7 @@ import { Avatar } from '../components/UserMenu'
 import { server, useAccount, type Preferences, type Profile, type TripSummary } from '../lib/account'
 import { LANGUAGES } from '../lib/i18n'
 import { toast } from '../lib/toast'
+import { INTERESTS, PARTIES, STYLES } from '../lib/travelProfile'
 import { useStore } from '../store'
 import { Page, Panel } from './common'
 
@@ -80,6 +81,24 @@ export function SettingsPage() {
 // --------------------------------------------------------------------------- shared bits
 
 const input = 'h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-[15px] text-slate-900 outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15 disabled:bg-slate-50 disabled:text-slate-500 dark:border-white/15 dark:bg-ink-900 dark:text-white dark:disabled:bg-white/5'
+
+function Segmented<T extends string>({ value, onChange, options }: { value: T | ''; onChange: (value: T) => void; options: { value: T; label: string }[] }) {
+  return (
+    <div className="grid rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-white/10 dark:bg-white/5" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => onChange(option.value)}
+          className={clsx('truncate rounded-md px-2 py-1.5 text-sm font-semibold capitalize transition', value === option.value ? 'bg-white text-brand-800 shadow-sm dark:bg-ink-800 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white')}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function Label({ text, hint, children }: { text: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -196,7 +215,10 @@ function PreferencesTab() {
   const profile = useAccount((s) => s.profile)
   const update = useAccount((s) => s.update)
   const setLanguage = useStore((s) => s.setLanguage)
-  const [prefs, setPrefs] = useState<Preferences>(profile?.preferences ?? { homeCity: '', currency: '', language: 'en', theme: 'system', readAloud: false })
+  const [prefs, setPrefs] = useState<Preferences>({
+    homeCity: '', currency: '', language: 'en', theme: 'system', readAloud: false, interests: [], travelParty: '', travelStyle: '',
+    ...profile?.preferences,
+  })
   const save = useSaving()
   const set = <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
     setPrefs((p) => ({ ...p, [key]: value }))
@@ -256,6 +278,40 @@ function PreferencesTab() {
             ]}
           />
         </Label>
+        <fieldset className="space-y-4 rounded-xl border border-slate-200 p-4 sm:col-span-2 dark:border-white/10">
+          <legend className="px-1 text-sm font-bold text-slate-900 dark:text-white">Travel profile</legend>
+          <p className="-mt-1 text-xs text-slate-500">Used when your message doesn't say: interests shape the sights, who you travel with sets the group size, and the style picks the starting package.</p>
+          <div>
+            <div className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Trips you enjoy <span className="font-normal text-slate-500">(up to 4)</span></div>
+            <div className="flex flex-wrap gap-2">
+              {INTERESTS.map((item) => {
+                const on = prefs.interests.includes(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={!on && prefs.interests.length >= 4}
+                    onClick={() => set('interests', on ? prefs.interests.filter((x) => x !== item.id) : [...prefs.interests, item.id])}
+                    className={clsx('inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition active:scale-95 disabled:opacity-40', on ? 'border-brand-600 bg-brand-700 text-white dark:border-brand-400 dark:bg-brand-500' : 'border-slate-200 text-slate-600 hover:border-brand-300 dark:border-white/10 dark:text-slate-300')}
+                  >
+                    {on && <Check size={13} />} {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Usually travel</div>
+              <Segmented value={prefs.travelParty} onChange={(v) => set('travelParty', v)} options={PARTIES.map((p) => ({ value: p.id, label: p.label.replace('With ', '').replace('As a ', '') }))} />
+            </div>
+            <div>
+              <div className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Travel style</div>
+              <Segmented value={prefs.travelStyle} onChange={(v) => set('travelStyle', v)} options={STYLES.map((s) => ({ value: s.id, label: s.label }))} />
+            </div>
+          </div>
+        </fieldset>
         <label className="flex items-center gap-3 sm:col-span-2">
           <input type="checkbox" checked={prefs.readAloud} onChange={(e) => set('readAloud', e.target.checked)} className="h-5 w-5 accent-brand-700" />
           <span className="text-sm font-medium text-slate-800 dark:text-slate-100">Read the assistant's replies aloud</span>

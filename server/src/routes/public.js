@@ -26,6 +26,7 @@ export function healthRoute() {
       clerk: configured.clerk(),
       clerkWebhook: configured.webhook(),
       cloudinary: configured.cloudinary(),
+      admin: configured.admin(),
       allowedOrigins: config.allowedOrigins,
     })
   })

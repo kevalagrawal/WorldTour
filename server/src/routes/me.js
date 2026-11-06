@@ -23,8 +23,12 @@ const profileUpdate = z.object({
       language: z.enum(['en', 'hi', 'gu', 'mr']).optional(),
       theme: z.enum(['system', 'light', 'dark']).optional(),
       readAloud: z.boolean().optional(),
+      interests: z.array(z.enum(['beaches', 'mountains', 'heritage', 'food', 'adventure', 'nature', 'spiritual', 'nightlife'])).max(8).optional(),
+      travelParty: z.enum(['', 'solo', 'couple', 'family', 'friends']).optional(),
+      travelStyle: z.enum(['', 'budget', 'balanced', 'premium']).optional(),
     })
     .optional(),
+  surveyDone: z.boolean().optional(),
 })
 
 const photoUpdate = z.object({ publicId: z.string().min(3).max(200), url: z.url().max(500) })
@@ -45,6 +49,7 @@ export function meRoutes({ identity, photos }) {
       await identity.updateUser(req.clerkId, { firstName, lastName: rest.join(' ') }).catch(() => undefined)
     }
     if (body.phone !== undefined) user.phone = body.phone
+    if (body.surveyDone !== undefined) user.surveyDone = body.surveyDone
     for (const [key, value] of Object.entries(body.preferences ?? {})) user.preferences[key] = key === 'currency' ? value.toUpperCase() : value
     await user.save()
     res.json({ user: user.toPublic() })

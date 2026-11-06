@@ -21,6 +21,7 @@ const chunks = {
   plan: () => import('./components/plan/PlanView'),
   auth: () => import('./pages/AuthPage'),
   photo: () => import('./pages/PhotoSetup'),
+  survey: () => import('./pages/PreferencesSetup'),
   profile: () => import('./pages/ProfilePage'),
   settings: () => import('./pages/SettingsPage'),
   history: () => import('./pages/HistoryPage'),
@@ -28,10 +29,13 @@ const chunks = {
   shared: () => import('./pages/SharedTrip'),
   notFound: () => import('./pages/NotFound'),
 }
+// The private admin dashboard is not preloaded: ordinary visitors never download it.
+const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
 const PlanView = lazy(() => chunks.plan().then((m) => ({ default: m.PlanView })))
 const AuthPage = lazy(() => chunks.auth().then((m) => ({ default: m.AuthPage })))
 const SsoCallback = lazy(() => chunks.auth().then((m) => ({ default: m.SsoCallback })))
 const PhotoSetup = lazy(() => chunks.photo().then((m) => ({ default: m.PhotoSetup })))
+const PreferencesSetup = lazy(() => chunks.survey().then((m) => ({ default: m.PreferencesSetup })))
 const ProfilePage = lazy(() => chunks.profile().then((m) => ({ default: m.ProfilePage })))
 const SettingsPage = lazy(() => chunks.settings().then((m) => ({ default: m.SettingsPage })))
 const HistoryPage = lazy(() => chunks.history().then((m) => ({ default: m.HistoryPage })))
@@ -63,6 +67,17 @@ export default function App() {
     whenIdle(() => Object.values(chunks).forEach((load) => void load().catch(() => undefined)))
   }, [])
   usePrefetchAccount()
+  const { pathname } = useLocation()
+
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    // Its own full-screen layout: no site header, no planner.
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <AdminPage />
+        <Toaster />
+      </Suspense>
+    )
+  }
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -74,6 +89,7 @@ export default function App() {
           <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
           <Route path="/sso-callback" element={<SsoCallback />} />
           <Route path="/onboarding/photo" element={<SignedIn><PhotoSetup /></SignedIn>} />
+          <Route path="/onboarding/preferences" element={<SignedIn><PreferencesSetup /></SignedIn>} />
           <Route path="/profile" element={<SignedIn><ProfilePage /></SignedIn>} />
           <Route path="/settings" element={<SignedIn><SettingsPage /></SignedIn>} />
           <Route path="/history" element={<SignedIn><HistoryPage /></SignedIn>} />
@@ -119,6 +135,14 @@ function usePrefetchAccount() {
   }, [hasProfile])
 }
 
+function sessionFlag(key: string): boolean {
+  try {
+    return sessionStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
 function usePreferences() {
   const profile = useAccount((s) => s.profile)
   const update = useAccount((s) => s.update)
@@ -147,6 +171,10 @@ function usePreferences() {
       /* ignore */
     }
     if (!profile.onboarded && !skipped && location.pathname === '/') navigate('/onboarding/photo')
+    else if (profile.onboarded && !profile.surveyDone && location.pathname === '/' && !sessionFlag('wt-survey-later') && Date.now() - new Date(profile.memberSince).getTime() < 3 * 86_400_000) {
+      // A new account that left before the three questions gets them on its next visit (only in its first days).
+      navigate('/onboarding/preferences')
+    }
   }, [profile, setLanguage, navigate, location.pathname])
 
   useEffect(() => {

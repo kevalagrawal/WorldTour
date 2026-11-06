@@ -118,7 +118,35 @@ def _apply_defaults(request: TravelRequest, defaults: dict) -> TravelRequest:
     currency = str(defaults.get("currency") or "").upper()
     if re.fullmatch(r"[A-Z]{3}", currency):
         data["preferred_currency"] = currency
+    # The answers given after sign-up fill gaps only; the message always wins.
+    interests = list(dict.fromkeys(pref for item in defaults.get("interests") or [] for pref in _INTEREST_PREFERENCES.get(item, ())))
+    if interests and not data.get("preferences"):
+        data["preferences"] = interests
+        data["parser_notes"] = [*(data.get("parser_notes") or []), "Using the interests from your profile."]
+    party = defaults.get("travel_party")
+    if not data.get("travelers") and party in _PARTY_SIZE:
+        data["travelers"] = _PARTY_SIZE[party]
+        data["parser_notes"] = [*(data.get("parser_notes") or []), f"Planned for {_PARTY_SIZE[party]} (you travel {party} per your profile)."]
+    if party == "family" and not data.get("trip_type"):
+        data["trip_type"] = "family"
+    style = defaults.get("travel_style")
+    if style in {"budget", "balanced", "premium"} and not data.get("package_choice"):
+        data["package_choice"] = style
     return TravelRequest.model_validate(data)
+
+
+# Profile interests → the planner's preference words (see the places search categories).
+_INTEREST_PREFERENCES = {
+    "beaches": ("beach",),
+    "mountains": ("nature", "adventure"),
+    "heritage": ("history", "culture"),
+    "food": ("food",),
+    "adventure": ("adventure",),
+    "nature": ("nature",),
+    "spiritual": ("culture",),
+    "nightlife": ("shopping",),
+}
+_PARTY_SIZE = {"solo": 1, "couple": 2}
 
 
 def _essentials_missing(request: TravelRequest) -> list[str]:
