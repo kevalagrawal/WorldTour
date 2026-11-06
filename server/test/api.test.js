@@ -24,6 +24,8 @@ before(async () => {
   process.env.CLOUDINARY_FOLDER = 'worldtour/avatars'
   process.env.APP_URL = 'https://worldtour-xi.vercel.app'
   process.env.ADMIN_CODE = 'test-admin-246810'
+  process.env.INTERNAL_API_SECRET = 'test-internal-secret-0123456789'
+  process.env.AI_URL = 'http://127.0.0.1:9' // nothing listens: the planner counts as unreachable
   ;({ Webhook } = await import('svix'))
   const { createApp } = await import('../src/app.js')
   ;({ disconnectDatabase: disconnect } = await import('../src/db.js'))
@@ -246,6 +248,8 @@ describe('admin dashboard', () => {
     assert.equal(ok.status, 200)
     token = ok.body.token
     assert.ok(new Date(ok.body.expiresAt) > new Date())
+    // The dashboard locks itself after 5 minutes.
+    assert.ok(new Date(ok.body.expiresAt) - Date.now() <= 5 * 60 * 1000 + 1000)
     const [payload, signature] = token.split('.')
     const forged = Buffer.from(JSON.stringify({ role: 'admin', exp: Date.now() + 1e9 })).toString('base64url')
     assert.equal((await request(app).get('/api/admin/overview').set('Authorization', `Admin ${forged}.${signature}`)).status, 401)
@@ -271,10 +275,67 @@ describe('admin dashboard', () => {
     assert.equal((await admin('/api/admin/users/not-an-id')).status, 404)
   })
 
+  test('deleting a user removes the sign-in, photo, trips and profile', async () => {
+    const before = calls.deleteUser.length
+    await as('user_bob').get('/api/me')
+    const bob = (await admin('/api/admin/users?search=bob')).body.users[0]
+    assert.ok(bob)
+    assert.equal((await request(app).delete(`/api/admin/users/${bob.id}`)).status, 401)
+    const res = await request(app).delete(`/api/admin/users/${bob.id}`).set('Authorization', `Admin ${token}`)
+    assert.equal(res.status, 200)
+    assert.equal(res.body.deleted, true)
+    assert.deepEqual(calls.deleteUser.slice(before), ['user_bob'])
+    assert.equal((await admin(`/api/admin/users/${bob.id}`)).status, 404)
+    assert.equal((await request(app).delete(`/api/admin/users/${bob.id}`).set('Authorization', `Admin ${token}`)).status, 404)
+  })
+
+  test('spare API keys: stored encrypted, shown masked, read by the planner, reported, removed', async () => {
+    const add = (service, body) => request(app).post(`/api/admin/apis/${service}/keys`).set('Authorization', `Admin ${token}`).send(body)
+    assert.equal((await add('nope', { key: 'abcdefgh1234' })).status, 404)
+    assert.equal((await add('aviationstack', { key: 'short' })).status, 400)
+    const created = await add('aviationstack', { key: 'av-test-key-0000-9876', label: 'Backup 1' })
+    assert.equal(created.status, 201)
+    assert.equal(created.body.key.masked, '••••••••9876')
+    assert.equal((await add('aviationstack', { key: 'av-test-key-0000-9876' })).status, 409)
+
+    // Never stored in plain text.
+    const mongoose = (await import('mongoose')).default
+    const raw = await mongoose.connection.db.collection('apikeys').findOne({ last4: '9876' })
+    assert.ok(raw.secret.data && !JSON.stringify(raw).includes('av-test-key-0000-9876'))
+
+    const list = await admin('/api/admin/apis')
+    const av = list.body.services.find((s) => s.id === 'aviationstack')
+    assert.equal(av.keys.length, 1)
+    assert.equal(av.keys[0].readable, true)
+    assert.ok(!JSON.stringify(list.body).includes('av-test-key-0000-9876'))
+    assert.equal(list.body.plannerReachable, false)
+
+    const internal = (path) => request(app).get(path)
+    assert.equal((await internal('/api/internal/keys')).status, 401)
+    assert.equal((await internal('/api/internal/keys').set('x-internal-secret', 'wrong-secret-0123456789')).status, 401)
+    const keys = await internal('/api/internal/keys').set('x-internal-secret', 'test-internal-secret-0123456789')
+    assert.equal(keys.body.keys.aviationstack[0].key, 'av-test-key-0000-9876')
+
+    const id = created.body.key.id
+    const report = (body) => request(app).post('/api/internal/keys/report').set('x-internal-secret', 'test-internal-secret-0123456789').send(body)
+    assert.equal((await report({ service: 'aviationstack', id, status: 'exhausted', error: 'usage limit reached' })).status, 200)
+    assert.equal((await report({ service: 'serpapi', id: 'env', last4: 'ab12', status: 'exhausted', error: 'out of searches' })).status, 200)
+    const after = (await admin('/api/admin/apis')).body.services
+    assert.equal(after.find((s) => s.id === 'aviationstack').keys[0].status, 'exhausted')
+    assert.equal(after.find((s) => s.id === 'serpapi').envKey.status.status, 'exhausted')
+
+    assert.equal((await request(app).delete(`/api/admin/apis/keys/${id}`).set('Authorization', `Admin ${token}`)).status, 200)
+    assert.equal((await admin('/api/admin/apis')).body.services.find((s) => s.id === 'aviationstack').keys.length, 0)
+  })
+
   test('wrong codes are refused and locked out after 5 tries', async () => {
-    const statuses = []
-    for (let i = 0; i < 6; i++) statuses.push((await request(app).post('/api/admin/session').send({ code: `000000${i}` })).status)
-    assert.deepEqual(statuses, [401, 401, 401, 401, 401, 429])
+    const replies = []
+    for (let i = 0; i < 6; i++) replies.push(await request(app).post('/api/admin/session').send({ code: `000000${i}` }))
+    assert.deepEqual(replies.map((r) => r.status), [401, 401, 401, 401, 401, 429])
+    assert.deepEqual(replies.map((r) => r.body.attempts), [1, 2, 3, 4, 5, 5])
+    assert.deepEqual(replies.map((r) => r.body.remaining), [4, 3, 2, 1, 0, 0])
+    assert.equal(replies[4].body.locked, true)
+    assert.ok(replies[5].body.retryAt)
   })
 })
 

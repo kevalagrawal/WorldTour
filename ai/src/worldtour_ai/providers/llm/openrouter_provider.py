@@ -8,6 +8,8 @@ from worldtour_ai.config.settings import get_settings
 from worldtour_ai.utils.agent_logs import log_api_call
 from worldtour_ai.utils.exceptions import ConfigurationError, ProviderError, QuotaExceededError
 from worldtour_ai.utils.http import HttpClient
+from worldtour_ai.utils import key_pool
+from worldtour_ai.utils.key_pool import api_key
 
 
 class RateLimitedError(ProviderError):
@@ -43,25 +45,31 @@ class OpenRouterProvider:
         model = settings.openrouter_free_model
         if not settings.free_model_allowed(model):
             raise ConfigurationError(f"Refusing non-free model: {model}")
-        if not settings.openrouter_api_key:
+        key = api_key("openrouter")
+        if not key:
             raise ProviderError("OPENROUTER_API_KEY is not set")
         if settings.disable_network:
             raise ProviderError("Network access is disabled")
         import httpx
 
-        started = time.perf_counter()
-        try:
-            return self._post(httpx, settings, model, system_prompt, user_prompt, timeout, started)
-        except ProviderError as exc:
-            log_api_call("openrouter", "https://openrouter.ai/api/v1/chat/completions", status=getattr(exc, "status", None), duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=str(exc), model=model)
-            raise
+        while True:
+            started = time.perf_counter()
+            try:
+                return self._post(httpx, settings, model, system_prompt, user_prompt, timeout, started, key)
+            except ProviderError as exc:
+                log_api_call("openrouter", "https://openrouter.ai/api/v1/chat/completions", status=getattr(exc, "status", None), duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=str(exc), model=model)
+                kind = key_pool.failure_kind(exc)
+                following = key_pool.mark_failed("openrouter", key, kind, str(exc)) if kind else None
+                if not following:
+                    raise
+                key = following  # the daily free limit of this key is used up: carry on with the next one
 
-    def _post(self, httpx, settings, model, system_prompt, user_prompt, timeout, started) -> str:
+    def _post(self, httpx, settings, model, system_prompt, user_prompt, timeout, started, key) -> str:
         try:
             response = httpx.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.openrouter_api_key}",
+                    "Authorization": f"Bearer {key}",
                     "Content-Type": "application/json",
                     "HTTP-Referer": "http://localhost/worldtour",
                     "X-Title": "WorldTour Academic Project",
@@ -87,6 +95,8 @@ class OpenRouterProvider:
             raise RateLimitedError(
                 "OpenRouter returned 429", float(retry_after) if retry_after and retry_after.isdigit() else None
             )
+        if response.status_code in {401, 402, 403}:
+            raise ProviderError(f"OpenRouter returned {response.status_code}: {response.text[:160]}" + (" (credits used up)" if response.status_code == 402 else ""))
         if response.status_code >= 400:
             raise ProviderError(f"OpenRouter returned {response.status_code}")
         payload = response.json()

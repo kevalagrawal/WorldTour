@@ -17,6 +17,7 @@ from worldtour_ai.providers.weather.open_meteo_provider import OpenMeteoProvider
 from worldtour_ai.utils.exceptions import ProviderError
 from worldtour_ai.utils.agent_logs import log_event
 from worldtour_ai.utils.logging import get_logger
+from worldtour_ai.utils.key_pool import api_key
 
 logger = get_logger("worldtour.providers")
 
@@ -76,9 +77,9 @@ class FlightGateway:
         self.chain = []
         if settings.disable_network:
             return
-        if settings.serpapi_api_key:
+        if api_key("serpapi"):
             self.chain.append(SerpApiFlightProvider())
-        if settings.flight_provider == "aviationstack" and settings.aviationstack_api_key:
+        if settings.flight_provider == "aviationstack" and api_key("aviationstack"):
             self.chain.append(AviationStackFlightProvider())
 
     def search_flights(self, *args, **kwargs) -> dict:
@@ -93,11 +94,11 @@ class HotelGateway:
         self.chain = []
         if settings.disable_network:
             return
-        if settings.serpapi_api_key:
+        if api_key("serpapi"):
             self.chain.append(SerpApiHotelProvider())
-        if settings.hotel_provider in {"openrouter", "llm"} and settings.openrouter_api_key:
+        if settings.hotel_provider in {"openrouter", "llm"} and api_key("openrouter"):
             self.chain.append(OpenRouterHotelProvider())
-        if settings.geoapify_api_key:
+        if api_key("geoapify"):
             self.chain.append(GeoapifyHotelProvider())
 
     def search_hotels(self, *args, **kwargs) -> dict:
@@ -119,7 +120,7 @@ class PlacesGateway:
         settings = get_settings()
         use_live = (
             settings.places_provider == "geoapify"
-            and bool(settings.geoapify_api_key)
+            and bool(api_key("geoapify"))
             and not settings.disable_network
         )
         self.primary = GeoapifyPlacesProvider() if use_live else None

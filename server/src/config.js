@@ -23,8 +23,14 @@ export const config = {
   },
   allowedOrigins: list(process.env.ALLOWED_ORIGINS || 'http://localhost:5173,http://localhost:4173'),
   appUrl: (process.env.APP_URL || 'https://worldtour-xi.vercel.app').replace(/\/$/, ''),
+  // The planner (ai/), asked which of its own keys are set (yes/no only).
+  aiUrl: (process.env.AI_URL || 'https://world-tour-nine.vercel.app').replace(/\/$/, ''),
   // Opens the private /admin dashboard. Empty = dashboard switched off. Never sent to the browser.
   adminCode: String(process.env.ADMIN_CODE || '').trim(),
+  // Shared with the planner (ai/ INTERNAL_API_SECRET): it reads the spare API keys with this.
+  internalSecret: String(process.env.INTERNAL_API_SECRET || '').trim(),
+  // Encrypts the spare API keys stored in MongoDB. Falls back to INTERNAL_API_SECRET.
+  keyEncryptionSecret: String(process.env.KEY_ENCRYPTION_SECRET || process.env.INTERNAL_API_SECRET || '').trim(),
   // Limits that keep one trip document well under MongoDB's 16 MB.
   maxMessages: 400,
   maxVersions: 15,
@@ -36,4 +42,5 @@ export const configured = {
   webhook: () => !!config.clerk.webhookSecret,
   cloudinary: () => !!(config.cloudinary.cloudName && config.cloudinary.apiKey && config.cloudinary.apiSecret),
   admin: () => config.adminCode.length >= 6,
+  apiKeys: () => config.internalSecret.length >= 16 && config.keyEncryptionSecret.length >= 16,
 }

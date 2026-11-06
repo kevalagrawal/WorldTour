@@ -6,6 +6,8 @@ import re
 import time
 from dataclasses import dataclass
 
+from worldtour_ai.utils.key_pool import api_key
+
 
 @dataclass(frozen=True)
 class Place:
@@ -202,7 +204,7 @@ def _geocode(key: str) -> Place | None:
     settings = get_settings()
     if settings.disable_network:
         return None
-    place = _geoapify_town(key, settings.geoapify_api_key) if settings.geoapify_api_key else None
+    place = _geoapify_town(key, api_key("geoapify")) if api_key("geoapify") else None
     place = place or _open_meteo_town(key)
     _GEOCODED[key] = (time.time(), place)
     if place:

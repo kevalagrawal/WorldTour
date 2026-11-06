@@ -20,6 +20,7 @@ from worldtour_ai.providers.llm.openrouter_provider import OpenRouterProvider
 from worldtour_ai.utils.cache import ResponseCache
 from worldtour_ai.utils.exceptions import EmptyResultError, ProviderError
 from worldtour_ai.utils.http import HttpClient
+from worldtour_ai.utils.key_pool import api_key
 
 SYSTEM_PROMPT = """You are a hotel research assistant.
 Return ONLY a JSON object, no prose, in this shape:
@@ -150,14 +151,14 @@ class OpenRouterHotelProvider(BaseHotelProvider):
     def _mapped_hotels(self, lat: float | None, lon: float | None) -> list[dict]:
         """Named hotels on the map within 12 km of the centre, nearest first."""
         settings = get_settings()
-        if lat is None or lon is None or not settings.geoapify_api_key or settings.disable_network:
+        if lat is None or lon is None or not api_key("geoapify") or settings.disable_network:
             return []
         params = {
             "categories": "accommodation.hotel",
             "filter": f"circle:{lon},{lat},12000",
             "bias": f"proximity:{lon},{lat}",
             "limit": 60,
-            "apiKey": settings.geoapify_api_key,
+            "apiKey": api_key("geoapify"),
         }
         try:
             payload = self.http.get_json("https://api.geoapify.com/v2/places", params=params, cache_ttl=7 * 24 * 3600)
@@ -176,9 +177,9 @@ class OpenRouterHotelProvider(BaseHotelProvider):
 
     def _locate(self, name: str, city: str, lat: float | None, lon: float | None) -> dict | None:
         settings = get_settings()
-        if not settings.geoapify_api_key or settings.disable_network:
+        if not api_key("geoapify") or settings.disable_network:
             return None
-        params = {"text": f"{name}, {city}", "format": "json", "limit": 1, "apiKey": settings.geoapify_api_key}
+        params = {"text": f"{name}, {city}", "format": "json", "limit": 1, "apiKey": api_key("geoapify")}
         if lat is not None and lon is not None:
             params["filter"] = f"circle:{lon},{lat},60000"
         try:

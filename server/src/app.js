@@ -7,6 +7,7 @@ import { clerkIdentity } from './lib/identity.js'
 import { cloudinaryPhotos } from './lib/photos.js'
 import { errorHandler, notFound } from './middleware/errors.js'
 import { adminRoutes } from './routes/admin.js'
+import { internalRoutes } from './routes/internal.js'
 import { meRoutes } from './routes/me.js'
 import { clerkWebhookRoute, healthRoute, shareRoute } from './routes/public.js'
 import { statsRoutes } from './routes/stats.js'
@@ -46,7 +47,8 @@ export function createApp({ identity = clerkIdentity(), photos = cloudinaryPhoto
   app.use('/api/me', meRoutes({ identity, photos }))
   app.use('/api/trips', tripRoutes({ identity }))
   app.use('/api/stats', statsRoutes({ identity }))
-  app.use('/api/admin', adminRoutes())
+  app.use('/api/admin', adminRoutes({ identity, photos }))
+  app.use('/api/internal', internalRoutes())
 
   app.use(notFound)
   app.use(errorHandler)

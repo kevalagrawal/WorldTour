@@ -17,6 +17,7 @@ from worldtour_ai.data.places import find_mentions, lookup_place, normalize, pla
 from worldtour_ai.prompts.parser_prompt import PARSER_SYSTEM_PROMPT
 from worldtour_ai.providers.llm.openrouter_provider import OpenRouterProvider
 from worldtour_ai.schemas.models import TravelRequest
+from worldtour_ai.utils.key_pool import api_key
 
 _WORDS = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
@@ -216,7 +217,7 @@ def grounded_llm_fields(text: str) -> dict | None:
 
 def _try_llm(text: str) -> dict | None:
     settings = get_settings()
-    if not settings.openrouter_api_key or settings.disable_network:
+    if not api_key("openrouter") or settings.disable_network:
         return None
     if not settings.free_model_allowed():
         return None

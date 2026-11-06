@@ -16,6 +16,7 @@ from worldtour_ai.config.settings import get_settings
 from worldtour_ai.providers.flights.base_flight_provider import BaseFlightProvider
 from worldtour_ai.utils.exceptions import EmptyResultError, ProviderError, QuotaExceededError
 from worldtour_ai.utils.http import HttpClient
+from worldtour_ai.utils.key_pool import api_key
 
 LONG_HAUL_HUBS = [
     "DXB", "DOH", "AUH", "IST", "LHR", "FRA", "CDG", "AMS", "MUC", "ZRH",
@@ -31,7 +32,7 @@ class AviationStackFlightProvider(BaseFlightProvider):
     data_source = "live"
 
     def __init__(self, api_key: str | None = None, http: HttpClient | None = None) -> None:
-        self.api_key = api_key if api_key is not None else get_settings().aviationstack_api_key
+        self.api_key = api_key if api_key is not None else api_key("aviationstack")
         self.http = http or HttpClient()
 
     def search_flights(self, origin_iata: str, destination_iata: str, travel_date: str | None = None, **_) -> dict:

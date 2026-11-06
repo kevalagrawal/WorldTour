@@ -3,27 +3,34 @@ import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import mongoose from 'mongoose'
 import { z } from 'zod'
-import { config } from '../config.js'
+import { config, configured } from '../config.js'
 import { connectDatabase } from '../db.js'
 import { HttpError, parse } from '../middleware/errors.js'
+import { decrypt, encrypt, FREE_SERVICES, SERVICES, serviceIds, testKey } from '../lib/apiKeys.js'
+import { ApiKey } from '../models/ApiKey.js'
 import { Trip } from '../models/Trip.js'
 import { User } from '../models/User.js'
 
 /**
- * The private admin dashboard's API (read-only).
+ * The private admin dashboard's API.
  *
  *   POST /api/admin/session   { code }  → { token, expiresAt }   (code = ADMIN_CODE on the server)
  *   GET  /api/admin/overview            totals, sign-ups and trips per day, top destinations
  *   GET  /api/admin/users               search, sort, page
  *   GET  /api/admin/users/:id           everything about one user, with their trips
  *   GET  /api/admin/trips/:id           one trip: conversation, every itinerary version, notes, sharing
+ *   DELETE /api/admin/users/:id         delete an account: sign-in (Clerk), photo, trips and profile
+ *   GET    /api/admin/apis              outside APIs, the planner's own keys and the spare keys
+ *   POST   /api/admin/apis/:service/keys   add a spare key (tested first where that is free)
+ *   POST   /api/admin/apis/keys/:id/check  test a spare key again (credits left, still valid)
+ *   DELETE /api/admin/apis/keys/:id     remove a spare key
  *
  * The code never reaches the browser bundle. A correct code returns a signed pass valid for 2 hours
- * (header "Authorization: Admin <token>"); changing ADMIN_CODE invalidates every pass. Wrong codes are
+ * (header "Authorization: Admin <token>") valid for 5 minutes; changing ADMIN_CODE invalidates every pass. Wrong codes are
  * limited to 5 per 15 minutes per address, so the 6-digit code cannot be guessed by brute force.
  */
 
-const SESSION_MS = 2 * 60 * 60 * 1000
+const SESSION_MS = 5 * 60 * 1000 // the dashboard locks itself after 5 minutes
 const codeBody = z.object({ code: z.string().trim().min(1).max(64) })
 const listQuery = z.object({
   search: z.string().trim().max(120).optional(),
@@ -87,16 +94,33 @@ function userRow(user, tripCount = 0) {
   }
 }
 
-export function adminRoutes() {
+export function adminRoutes({ identity, photos }) {
   const router = Router()
 
+  // Wrong codes report how many of the MAX_ATTEMPTS were used, so the code screen can show it.
+  const MAX_ATTEMPTS = 5
+  const attempts = (req) => {
+    const info = req.rateLimit ?? { used: 0, resetTime: null }
+    const used = Math.min(info.used ?? 0, MAX_ATTEMPTS)
+    return { attempts: used, maxAttempts: MAX_ATTEMPTS, remaining: MAX_ATTEMPTS - used, retryAt: info.resetTime ?? null }
+  }
   router.post(
     '/session',
-    rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, skipSuccessfulRequests: true, standardHeaders: 'draft-7', legacyHeaders: false, message: { error: 'Too many wrong codes. Try again in 15 minutes.' } }),
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: MAX_ATTEMPTS,
+      skipSuccessfulRequests: true,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      handler: (req, res) => res.status(429).json({ error: 'Too many wrong codes. The code screen is locked for 15 minutes.', locked: true, ...attempts(req) }),
+    }),
     (req, res) => {
       if (!config.adminCode) throw new HttpError(503, 'The admin dashboard is switched off (ADMIN_CODE is not set).')
       const { code } = parse(codeBody, req.body)
-      if (!sameText(code, config.adminCode)) throw new HttpError(401, 'That code is not right.')
+      if (!sameText(code, config.adminCode)) {
+        const info = attempts(req)
+        return res.status(401).json({ error: 'That code is not right.', locked: info.remaining <= 0, ...info })
+      }
       res.json(issueToken())
     },
   )
@@ -210,6 +234,93 @@ export function adminRoutes() {
         updatedAt: t.updatedAt,
       })),
     })
+  })
+
+  router.delete('/users/:id', async (req, res) => {
+    const user = await User.findById(objectId(req.params.id))
+    if (!user) throw new HttpError(404, 'User not found.')
+    // The sign-in goes first: if Clerk refuses, nothing is deleted and the admin can try again.
+    // (Otherwise the person could sign in again and get an empty profile back.)
+    await identity.deleteUser(user.clerkId).catch((error) => {
+      if (error?.status !== 404) throw new HttpError(502, `Clerk could not delete the sign-in: ${error?.message || 'unknown error'}`)
+    })
+    await Promise.resolve(photos.destroy?.(user.photo?.publicId)).catch(() => undefined)
+    const { deletedCount: trips } = await Trip.deleteMany({ user: user._id })
+    await user.deleteOne()
+    console.info(JSON.stringify({ event: 'admin_deleted_user', userId: user._id.toString(), trips }))
+    res.json({ deleted: true, trips })
+  })
+
+  // ---------------------------------------------------------------- outside APIs and spare keys
+  router.get('/apis', async (_req, res) => {
+    const [keys, planner] = await Promise.all([
+      ApiKey.find().sort({ createdAt: 1 }),
+      // Which keys the planner has in its own Vercel environment (yes/no only, never the key).
+      fetch(`${config.aiUrl}/api/health`, { signal: AbortSignal.timeout(5000) }).then((r) => r.json()).catch(() => null),
+    ])
+    const envSet = {
+      serpapi: planner?.sources?.live_fares_and_hotels,
+      openrouter: planner?.sources?.ai,
+      geoapify: planner?.sources?.maps_and_places,
+      aviationstack: planner?.sources?.flight_schedules,
+    }
+    res.json({
+      ready: configured.apiKeys(),
+      plannerReachable: !!planner,
+      services: SERVICES.map((service) => ({
+        ...service,
+        envKey: {
+          set: envSet[service.id] ?? null,
+          status: keys.find((k) => k.service === service.id && k.source === 'env')?.toAdmin() ?? null,
+        },
+        keys: keys.filter((k) => k.service === service.id && k.source === 'admin').map((k) => ({ ...k.toAdmin(), readable: !!decrypt(k.secret) })),
+      })),
+      free: FREE_SERVICES,
+    })
+  })
+
+  router.post('/apis/:service/keys', async (req, res) => {
+    if (!configured.apiKeys()) throw new HttpError(503, 'Set INTERNAL_API_SECRET on the server and the planner first (see server/.env.example).')
+    if (!serviceIds.includes(req.params.service)) throw new HttpError(404, 'Unknown service.')
+    const body = parse(z.object({ key: z.string().trim().min(8, 'paste the whole key').max(400), label: z.string().trim().max(60).optional() }), req.body)
+    if (await ApiKey.exists({ service: req.params.service, last4: body.key.slice(-4), source: 'admin' })) {
+      const same = (await ApiKey.find({ service: req.params.service, source: 'admin' })).some((k) => decrypt(k.secret) === body.key)
+      if (same) throw new HttpError(409, 'This key is already added.')
+    }
+    const check = await testKey(req.params.service, body.key)
+    if (check.ok === false) throw new HttpError(400, `The key did not work: ${check.error}`)
+    const key = await ApiKey.create({
+      service: req.params.service,
+      source: 'admin',
+      label: body.label || '',
+      secret: encrypt(body.key),
+      last4: body.key.slice(-4),
+      credits: check.credits ?? null,
+      checkedAt: check.ok === null ? null : new Date(),
+      lastError: check.error ?? '',
+    })
+    res.status(201).json({ key: key.toAdmin(), tested: check.ok !== null })
+  })
+
+  router.post('/apis/keys/:id/check', async (req, res) => {
+    const key = await ApiKey.findById(objectId(req.params.id))
+    if (!key || key.source !== 'admin') throw new HttpError(404, 'Key not found.')
+    const secret = decrypt(key.secret)
+    if (!secret) throw new HttpError(409, 'This key can no longer be read (the encryption secret changed). Remove it and add it again.')
+    const check = await testKey(key.service, secret)
+    if (check.ok === true) Object.assign(key, { status: 'active', lastError: '', exhaustedAt: null })
+    if (check.ok === false) Object.assign(key, { status: /used up|no searches left|429/i.test(check.error ?? '') ? 'exhausted' : 'invalid', lastError: check.error ?? '' })
+    if (check.credits) key.credits = check.credits
+    key.checkedAt = new Date()
+    await key.save()
+    res.json({ key: key.toAdmin(), tested: check.ok !== null })
+  })
+
+  router.delete('/apis/keys/:id', async (req, res) => {
+    const key = await ApiKey.findById(objectId(req.params.id))
+    if (!key || key.source !== 'admin') throw new HttpError(404, 'Key not found.')
+    await key.deleteOne()
+    res.json({ deleted: true })
   })
 
   router.get('/trips/:id', async (req, res) => {

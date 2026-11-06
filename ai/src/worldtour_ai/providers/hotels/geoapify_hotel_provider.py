@@ -6,6 +6,7 @@ from worldtour_ai.config.settings import get_settings
 from worldtour_ai.providers.hotels.base_hotel_provider import BaseHotelProvider
 from worldtour_ai.utils.exceptions import EmptyResultError, ProviderError
 from worldtour_ai.utils.http import HttpClient
+from worldtour_ai.utils.key_pool import api_key
 
 
 class GeoapifyHotelProvider(BaseHotelProvider):
@@ -18,7 +19,7 @@ class GeoapifyHotelProvider(BaseHotelProvider):
     def search_hotels(
         self, city: str, lat: float | None, lon: float | None, nights: int, preferences: list[str], **context
     ) -> dict:
-        key = get_settings().geoapify_api_key
+        key = api_key("geoapify")
         if not key or lat is None or lon is None:
             raise ProviderError("Geoapify hotel search needs an API key and coordinates")
         payload = self.http.get_json(

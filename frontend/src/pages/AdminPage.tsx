@@ -1,11 +1,12 @@
 import clsx from 'clsx'
 import {
-  Activity, ArrowLeft, BarChart3, CalendarDays, ChevronLeft, ChevronRight, ClipboardList, Copy, Globe2, Heart, Inbox, Layers, Loader2,
-  Lock, LogOut, Mail, MapPin, Menu, MessageSquareText, Phone, RefreshCw, Search, Share2, ShieldCheck, Sparkles, StickyNote, UserRound, Users, X,
+  Activity, ArrowLeft, BarChart3, ChevronLeft, ChevronRight, ClipboardList, Copy, ExternalLink, Eye, EyeOff, Globe2, Heart, Inbox, KeyRound, Layers, Loader2,
+  Lock, LogOut, Mail, MapPin, Menu, MessageSquareText, Phone, Plus, RefreshCw, Search, Share2, ShieldCheck, Sparkles, StickyNote, Timer, Trash2, Users, X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { MessageContent } from '../components/MessageContent'
-import { Logo } from '../components/ui'
+import { Select } from '../components/Select'
+import { ConfirmDialog, Logo } from '../components/ui'
 import { initials, SERVER_URL } from '../lib/account'
 import { toast } from '../lib/toast'
 import { INTERESTS, PARTIES, STYLES } from '../lib/travelProfile'
@@ -95,11 +96,23 @@ function loadSession(): { token: string; expiresAt: string } | null {
 
 class AdminError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
+  readonly data: Record<string, unknown>
+  constructor(message: string, status: number, data: Record<string, unknown> = {}) {
     super(message)
     this.status = status
+    this.data = data
   }
 }
+
+/** What the server says about wrong codes: attempts used out of the maximum, and when a lock ends. */
+interface Attempts {
+  attempts: number
+  maxAttempts: number
+  remaining: number
+  locked: boolean
+  retryAt: string | null
+}
+const ATTEMPTS_KEY = 'wt-admin-attempts'
 
 async function adminFetch<T>(path: string, token: string | null, init: { method?: string; body?: unknown } = {}): Promise<T> {
   let response: Response
@@ -113,7 +126,7 @@ async function adminFetch<T>(path: string, token: string | null, init: { method?
     throw new AdminError("Couldn't reach the server. Check your connection.", 0)
   }
   const data = await response.json().catch(() => ({}))
-  if (!response.ok) throw new AdminError(data?.error || `Request failed (${response.status}).`, response.status)
+  if (!response.ok) throw new AdminError(data?.error || `Request failed (${response.status}).`, response.status, data ?? {})
   return data as T
 }
 
@@ -127,7 +140,7 @@ const shortDate = (iso?: string | null) => {
 
 // --------------------------------------------------------------------------- page
 
-type View = { kind: 'overview' } | { kind: 'users' } | { kind: 'user'; id: string } | { kind: 'trip'; id: string; userId: string }
+type View = { kind: 'overview' } | { kind: 'users' } | { kind: 'user'; id: string } | { kind: 'trip'; id: string; userId: string } | { kind: 'apis' }
 type Sort = 'recent' | 'active' | 'trips' | 'name' | 'oldest'
 
 export function AdminPage() {
@@ -169,9 +182,36 @@ function CodeGate({ onUnlocked }: { onUnlocked: (session: { token: string; expir
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [shake, setShake] = useState(0)
+  const [reveal, setReveal] = useState(false)
+  const [tries, setTries] = useState<Attempts | null>(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(ATTEMPTS_KEY) || 'null') as Attempts | null
+      // A finished lock is forgotten; the server is the judge either way.
+      return saved && (!saved.retryAt || new Date(saved.retryAt) > new Date()) ? saved : null
+    } catch {
+      return null
+    }
+  })
+  const [now, setNow] = useState(() => Date.now())
   const boxes = useRef<(HTMLInputElement | null)[]>([])
+  const lockedFor = tries?.locked && tries.retryAt ? Math.max(0, new Date(tries.retryAt).getTime() - now) : 0
+  const locked = lockedFor > 0
 
   useEffect(() => boxes.current[0]?.focus(), [])
+  // Count down while locked; unlock the boxes when the time is up.
+  useEffect(() => {
+    if (!locked) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [locked])
+  useEffect(() => {
+    try {
+      if (tries) sessionStorage.setItem(ATTEMPTS_KEY, JSON.stringify(tries))
+      else sessionStorage.removeItem(ATTEMPTS_KEY)
+    } catch {
+      /* only for showing the count after a reload */
+    }
+  }, [tries])
 
   const submit = async (code: string) => {
     setBusy(true)
@@ -183,9 +223,14 @@ function CodeGate({ onUnlocked }: { onUnlocked: (session: { token: string; expir
       } catch {
         /* the session lasts until the tab closes */
       }
+      setTries(null)
       onUnlocked(result)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'That code is not right.')
+      if (e instanceof AdminError && typeof e.data.attempts === 'number') {
+        setTries(e.data as unknown as Attempts)
+        setNow(Date.now())
+      }
       setShake((n) => n + 1)
       setDigits(Array(6).fill(''))
       setTimeout(() => boxes.current[0]?.focus(), 50)
@@ -225,7 +270,7 @@ function CodeGate({ onUnlocked }: { onUnlocked: (session: { token: string; expir
             if (digits.every(Boolean)) void submit(digits.join(''))
           }}
         >
-          <div key={shake} className={clsx('mt-6 flex justify-center gap-2', shake && 'animate-[shake_0.4s_ease-in-out]')}>
+          <div key={shake} className={clsx('relative mt-6 flex justify-center gap-2', shake && 'animate-[shake_0.4s_ease-in-out]')}>
             {digits.map((digit, i) => (
               <input
                 key={i}
@@ -233,11 +278,13 @@ function CodeGate({ onUnlocked }: { onUnlocked: (session: { token: string; expir
                   boxes.current[i] = el
                 }}
                 value={digit}
+                // Masked like a password; the code goes over HTTPS and is never stored.
+                type={reveal ? 'text' : 'password'}
                 inputMode="numeric"
-                autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                autoComplete="off"
                 maxLength={6}
                 aria-label={`Digit ${i + 1}`}
-                disabled={busy}
+                disabled={busy || locked}
                 onChange={(e) => type(i, e.target.value)}
                 onKeyDown={(e) => e.key === 'Backspace' && !digit && i > 0 && boxes.current[i - 1]?.focus()}
                 className={clsx(
@@ -247,12 +294,37 @@ function CodeGate({ onUnlocked }: { onUnlocked: (session: { token: string; expir
               />
             ))}
           </div>
-          {error && <p className="mt-3 text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p>}
-          <button type="submit" disabled={busy || !digits.every(Boolean)} className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-700 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-50 dark:bg-brand-500">
-            {busy ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} />} Unlock dashboard
+          <button type="button" onClick={() => setReveal(!reveal)} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-white">
+            {reveal ? <EyeOff size={14} /> : <Eye size={14} />} {reveal ? 'Hide code' : 'Show code'}
+          </button>
+          {error && !locked && <p className="mt-3 text-sm font-medium text-rose-600 dark:text-rose-300">{error}</p>}
+          {tries && (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left dark:border-white/10 dark:bg-white/[0.03]" aria-live="polite">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-slate-700 dark:text-slate-200">Wrong attempts</span>
+                <span className={clsx('tabular-nums', tries.remaining <= 1 ? 'text-rose-600 dark:text-rose-300' : 'text-amber-600 dark:text-amber-300')}>
+                  {tries.attempts} of {tries.maxAttempts}
+                </span>
+              </div>
+              <div className="mt-2 flex gap-1.5">
+                {Array.from({ length: tries.maxAttempts }, (_, i) => (
+                  <span key={i} className={clsx('h-1.5 flex-1 rounded-full transition-colors', i < tries.attempts ? (tries.remaining <= 1 ? 'bg-rose-500' : 'bg-amber-500') : 'bg-slate-200 dark:bg-white/10')} />
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                {locked
+                  ? `Locked after ${tries.maxAttempts} wrong codes. Try again in ${Math.floor(lockedFor / 60000)}:${String(Math.floor((lockedFor % 60000) / 1000)).padStart(2, '0')}.`
+                  : tries.remaining === 1
+                    ? 'Last try before the page locks for 15 minutes.'
+                    : `${tries.remaining} tries left before the page locks for 15 minutes.`}
+              </p>
+            </div>
+          )}
+          <button type="submit" disabled={busy || locked || !digits.every(Boolean)} className="mt-6 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-brand-700 text-sm font-semibold text-white transition hover:bg-brand-800 disabled:opacity-50 dark:bg-brand-500">
+            {busy ? <Loader2 size={16} className="animate-spin" /> : locked ? <Lock size={16} /> : <ShieldCheck size={16} />} {locked ? 'Locked' : 'Unlock dashboard'}
           </button>
         </form>
-        <p className="mt-4 text-xs text-slate-400">Five wrong codes lock this page for 15 minutes.</p>
+        {!tries && <p className="mt-4 text-xs text-slate-400">Five wrong codes lock this page for 15 minutes.</p>}
       </div>
     </main>
   )
@@ -274,13 +346,23 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
     return () => clearTimeout(timer)
   }, [search])
 
+  const [left, setLeft] = useState(() => new Date(expiresAt).getTime() - Date.now())
   useEffect(() => {
-    const left = new Date(expiresAt).getTime() - Date.now()
-    const timer = setTimeout(() => {
-      toast.info('Admin session ended. Enter the code again.')
-      onSignOut()
-    }, Math.max(0, left))
-    return () => clearTimeout(timer)
+    let warned = false
+    const timer = setInterval(() => {
+      const remaining = new Date(expiresAt).getTime() - Date.now()
+      setLeft(remaining)
+      if (remaining <= 60_000 && !warned) {
+        warned = true
+        toast.warning('The admin dashboard locks in 1 minute.')
+      }
+      if (remaining <= 0) {
+        clearInterval(timer)
+        toast.info('Locked after 5 minutes. Enter the code to continue.')
+        onSignOut()
+      }
+    }, 1000)
+    return () => clearInterval(timer)
   }, [expiresAt, onSignOut])
 
   /** Calls that fail with 401 end the session. */
@@ -295,6 +377,18 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
     },
     [token, onSignOut],
   )
+  const send = useCallback(
+    async <T,>(path: string, method: 'POST' | 'DELETE', body?: unknown): Promise<T> => {
+      try {
+        return await adminFetch<T>(path, token, { method, body })
+      } catch (e) {
+        if (e instanceof AdminError && e.status === 401) onSignOut()
+        throw e
+      }
+    },
+    [token, onSignOut],
+  )
+  const remove = useCallback((path: string) => send<{ deleted: boolean; trips: number }>(path, 'DELETE'), [send])
 
   const goto = (next: View) => {
     setView(next)
@@ -304,11 +398,8 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
 
   const nav: { id: string; label: string; icon: ReactNode; active: boolean; onClick: () => void; count?: number | null }[] = [
     { id: 'overview', label: 'Overview', icon: <BarChart3 size={18} />, active: view.kind === 'overview', onClick: () => goto({ kind: 'overview' }) },
-    { id: 'users', label: 'All users', icon: <Inbox size={18} />, active: view.kind !== 'overview' && sort === 'recent', onClick: () => { setSort('recent'); goto({ kind: 'users' }) }, count: userCount },
-    { id: 'active', label: 'Recently active', icon: <Activity size={18} />, active: view.kind !== 'overview' && sort === 'active', onClick: () => { setSort('active'); goto({ kind: 'users' }) } },
-    { id: 'trips', label: 'Most trips', icon: <Globe2 size={18} />, active: view.kind !== 'overview' && sort === 'trips', onClick: () => { setSort('trips'); goto({ kind: 'users' }) } },
-    { id: 'name', label: 'By name', icon: <UserRound size={18} />, active: view.kind !== 'overview' && sort === 'name', onClick: () => { setSort('name'); goto({ kind: 'users' }) } },
-    { id: 'oldest', label: 'First sign-ups', icon: <CalendarDays size={18} />, active: view.kind !== 'overview' && sort === 'oldest', onClick: () => { setSort('oldest'); goto({ kind: 'users' }) } },
+    { id: 'users', label: 'Users', icon: <Inbox size={18} />, active: ['users', 'user', 'trip'].includes(view.kind), onClick: () => goto({ kind: 'users' }), count: userCount },
+    { id: 'apis', label: 'API keys', icon: <KeyRound size={18} />, active: view.kind === 'apis', onClick: () => goto({ kind: 'apis' }) },
   ]
 
   return (
@@ -336,7 +427,12 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
         </label>
         <div className="ml-auto flex items-center gap-1">
           <button onClick={() => setRefresh((n) => n + 1)} aria-label="Refresh" title="Refresh" className="grid h-10 w-10 place-items-center rounded-full text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-white/10"><RefreshCw size={18} /></button>
-          <span className="hidden text-xs text-slate-500 xl:inline">Session until {new Date(expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span
+            title="The dashboard locks itself after 5 minutes"
+            className={clsx('inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold tabular-nums', left <= 60_000 ? 'animate-pulse bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300' : 'bg-slate-200/60 text-slate-600 dark:bg-white/5 dark:text-slate-300')}
+          >
+            <Timer size={14} /> {Math.max(0, Math.floor(left / 60000))}:{String(Math.max(0, Math.floor((left % 60000) / 1000))).padStart(2, '0')}
+          </span>
           <button onClick={onSignOut} title="Lock dashboard" className="inline-flex h-10 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-slate-600 hover:bg-slate-200/70 dark:text-slate-300 dark:hover:bg-white/10">
             <LogOut size={17} /> <span className="hidden sm:inline">Lock</span>
           </button>
@@ -347,9 +443,8 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
         {menu && <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setMenu(false)} />}
         <aside className={clsx('fixed inset-y-0 left-0 z-30 w-64 shrink-0 bg-[#f6f8fc] pt-20 transition-transform lg:sticky lg:top-16 lg:h-[calc(100dvh-4rem)] lg:translate-x-0 lg:pt-3 dark:bg-ink-900', menu ? 'translate-x-0 shadow-2xl' : '-translate-x-full')}>
           <nav className="space-y-0.5 pr-3">
-            {nav.map((item, i) => (
+            {nav.map((item) => (
               <div key={item.id}>
-                {i === 1 && <div className="px-6 pb-1 pt-4 text-[11px] font-bold uppercase tracking-wider text-slate-400">Users</div>}
                 <button
                   onClick={item.onClick}
                   className={clsx(
@@ -365,16 +460,30 @@ function Dashboard({ token, expiresAt, onSignOut }: { token: string; expiresAt: 
             ))}
           </nav>
           <div className="mx-6 mt-6 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500 dark:border-white/10 dark:bg-ink-800">
-            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200"><ShieldCheck size={14} className="text-emerald-500" /> Read-only access</div>
-            <p className="mt-1">Passwords are never stored here: Clerk keeps them. Nothing can be changed from this dashboard.</p>
+            <div className="flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200"><ShieldCheck size={14} className="text-emerald-500" /> Admin access</div>
+            <p className="mt-1">View every account and delete one when needed. Passwords are never stored here: Clerk keeps them.</p>
           </div>
         </aside>
 
         <main className="min-w-0 flex-1 pb-6 pr-2 sm:pr-4 lg:pl-0">
           <div className="min-h-[calc(100dvh-5.5rem)] rounded-2xl bg-white shadow-soft dark:bg-ink-800">
             {view.kind === 'overview' && <OverviewView api={api} refresh={refresh} onOpenUser={(id) => goto({ kind: 'user', id })} />}
-            {view.kind === 'users' && <UsersView api={api} refresh={refresh} sort={sort} query={query} onTotal={setUserCount} onOpen={(id) => goto({ kind: 'user', id })} />}
-            {view.kind === 'user' && <UserView api={api} refresh={refresh} id={view.id} onBack={() => goto({ kind: 'users' })} onOpenTrip={(tripId) => goto({ kind: 'trip', id: tripId, userId: view.id })} />}
+            {view.kind === 'users' && <UsersView api={api} refresh={refresh} sort={sort} onSort={setSort} query={query} onTotal={setUserCount} onOpen={(id) => goto({ kind: 'user', id })} />}
+            {view.kind === 'user' && (
+              <UserView
+                api={api}
+                remove={remove}
+                refresh={refresh}
+                id={view.id}
+                onBack={() => goto({ kind: 'users' })}
+                onDeleted={() => {
+                  setRefresh((n) => n + 1)
+                  goto({ kind: 'users' })
+                }}
+                onOpenTrip={(tripId) => goto({ kind: 'trip', id: tripId, userId: view.id })}
+              />
+            )}
+            {view.kind === 'apis' && <ApisView api={api} send={send} refresh={refresh} />}
             {view.kind === 'trip' && <TripView api={api} refresh={refresh} id={view.id} onBack={() => goto({ kind: 'user', id: view.userId })} />}
           </div>
         </main>
@@ -528,7 +637,15 @@ function Chart({ title, rows, tone }: { title: string; rows?: { date: string; co
 
 // --------------------------------------------------------------------------- user list (the "inbox")
 
-function UsersView({ api, refresh, sort, query, onTotal, onOpen }: { api: Api; refresh: number; sort: Sort; query: string; onTotal: (n: number) => void; onOpen: (id: string) => void }) {
+const SORTS: { value: Sort; label: string }[] = [
+  { value: 'recent', label: 'Newest sign-ups' },
+  { value: 'active', label: 'Recently active' },
+  { value: 'trips', label: 'Most trips' },
+  { value: 'name', label: 'Name A–Z' },
+  { value: 'oldest', label: 'Oldest sign-ups' },
+]
+
+function UsersView({ api, refresh, sort, onSort, query, onTotal, onOpen }: { api: Api; refresh: number; sort: Sort; onSort: (sort: Sort) => void; query: string; onTotal: (n: number) => void; onOpen: (id: string) => void }) {
   const [page, setPage] = useState(1)
   const limit = 30
   const path = useMemo(() => {
@@ -552,7 +669,10 @@ function UsersView({ api, refresh, sort, query, onTotal, onOpen }: { api: Api; r
   return (
     <>
       <Toolbar>
-        <span className="px-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{query ? `Results for “${query}”` : { recent: 'All users · newest first', active: 'Recently active', trips: 'Most trips', name: 'By name', oldest: 'First sign-ups' }[sort]}</span>
+        <span className="truncate px-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{query ? `Results for “${query}”` : 'All users'}</span>
+        <div className="w-40 shrink-0 sm:w-44">
+          <Select size="sm" label="Sort users" value={sort} onChange={onSort} options={SORTS} />
+        </div>
         {loading && <Loader2 size={15} className="animate-spin text-slate-400" />}
         <span className="ml-auto text-xs text-slate-500">{data?.total ? `${from}–${to} of ${data.total}` : ''}</span>
         <button disabled={!data || data.page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Newer" className="grid h-9 w-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100 disabled:opacity-30 dark:text-slate-300 dark:hover:bg-white/5"><ChevronLeft size={18} /></button>
@@ -591,9 +711,36 @@ function UsersView({ api, refresh, sort, query, onTotal, onOpen }: { api: Api; r
 
 // --------------------------------------------------------------------------- one user
 
-function UserView({ api, refresh, id, onBack, onOpenTrip }: { api: Api; refresh: number; id: string; onBack: () => void; onOpenTrip: (id: string) => void }) {
+function UserView({ api, remove, refresh, id, onBack, onDeleted, onOpenTrip }: {
+  api: Api
+  remove: (path: string) => Promise<{ deleted: boolean; trips: number }>
+  refresh: number
+  id: string
+  onBack: () => void
+  onDeleted: () => void
+  onOpenTrip: (id: string) => void
+}) {
   const { data, error } = useAdminData<{ user: AdminUser; trips: AdminTripRow[] }>(api, `/api/admin/users/${id}`, refresh)
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [deleting, setDeleting] = useState(false)
   const user = data?.user
+  // The account's email (or DELETE when it has none) must be typed to confirm.
+  const confirmWord = user?.email || 'DELETE'
+  const deleteAccount = async () => {
+    if (!user || typed.trim().toLowerCase() !== confirmWord.toLowerCase() || deleting) return
+    setDeleting(true)
+    try {
+      const result = await remove(`/api/admin/users/${user.id}`)
+      toast.success(`${user.fullName || user.email} was deleted, with ${result.trips} trip${result.trips === 1 ? '' : 's'}.`)
+      setConfirming(false)
+      onDeleted()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The account could not be deleted.')
+    } finally {
+      setDeleting(false)
+    }
+  }
   const p = user?.preferences
   const copy = (text: string, what: string) => void navigator.clipboard?.writeText(text).then(() => toast.success(`${what} copied.`)).catch(() => undefined)
   return (
@@ -601,7 +748,36 @@ function UserView({ api, refresh, id, onBack, onOpenTrip }: { api: Api; refresh:
       <Toolbar>
         <button onClick={onBack} aria-label="Back to users" className="grid h-9 w-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/5"><ArrowLeft size={18} /></button>
         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">User details</span>
+        {user && (
+          <button onClick={() => { setTyped(''); setConfirming(true) }} className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10">
+            <Trash2 size={16} /> <span className="hidden sm:inline">Delete account</span>
+          </button>
+        )}
       </Toolbar>
+      <ConfirmDialog
+        open={confirming}
+        tone="danger"
+        icon={<Trash2 size={20} />}
+        title={`Delete ${user?.fullName || 'this account'}?`}
+        focusConfirm={false}
+        body={
+          <>
+            This permanently deletes their sign-in, profile photo, {data?.trips.length ?? 0} trip{data?.trips.length === 1 ? '' : 's'} with every prompt and itinerary, and shared links. It cannot be undone.
+            <span className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-200">Type <span className="font-mono">{confirmWord}</span> to confirm</span>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void deleteAccount()}
+              aria-label="Type the email to confirm"
+              autoFocus
+              className="mt-1.5 h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-500/15 dark:border-white/15 dark:bg-ink-900 dark:text-white"
+            />
+          </>
+        }
+        confirmLabel={deleting ? 'Deleting…' : 'Delete account'}
+        onCancel={() => !deleting && setConfirming(false)}
+        onConfirm={() => void deleteAccount()}
+      />
       {error ? (
         <Failed>{error}</Failed>
       ) : !user ? (
@@ -819,4 +995,228 @@ function Badge({ tone, children }: { tone: 'brand' | 'green' | 'amber' | 'slate'
     slate: 'bg-slate-100 text-slate-600 dark:bg-white/10 dark:text-slate-300',
   }
   return <span className={clsx('rounded px-1.5 py-0.5 text-[11px] font-semibold capitalize', tones[tone])}>{children}</span>
+}
+
+// --------------------------------------------------------------------------- outside APIs and keys
+
+interface ApiKeyRow {
+  id: string
+  label: string
+  masked: string
+  status: 'active' | 'exhausted' | 'invalid'
+  lastError: string
+  exhaustedAt: string | null
+  lastUsedAt: string | null
+  credits: { remaining: number | null; limit: number | null; used?: number | null; unit: string; freeTier?: boolean } | null
+  checkedAt: string | null
+  createdAt: string
+  readable?: boolean
+}
+
+interface ApiService {
+  id: string
+  name: string
+  purpose: string
+  envVar: string
+  signup: string
+  quota: string
+  envKey: { set: boolean | null; status: ApiKeyRow | null }
+  keys: ApiKeyRow[]
+}
+
+const KEY_STATUS: Record<ApiKeyRow['status'], { label: string; tone: 'green' | 'amber' | 'slate' }> = {
+  active: { label: 'Working', tone: 'green' },
+  exhausted: { label: 'Used up', tone: 'amber' },
+  invalid: { label: 'Rejected', tone: 'slate' },
+}
+
+function credits(c: ApiKeyRow['credits']): string {
+  if (!c) return ''
+  if (c.unit === 'searches') return c.remaining == null ? '' : `${c.remaining}${c.limit ? ` of ${c.limit}` : ''} searches left`
+  if (c.unit === 'USD credit') return c.remaining == null ? (c.freeTier ? 'Free tier (no credit)' : 'No spending limit') : `$${Number(c.remaining).toFixed(2)} credit left`
+  return ''
+}
+
+function ApisView({ api, send, refresh }: { api: Api; send: <T>(path: string, method: 'POST' | 'DELETE', body?: unknown) => Promise<T>; refresh: number }) {
+  const [tick, setTick] = useState(0)
+  const { data, error } = useAdminData<{ ready: boolean; plannerReachable: boolean; services: ApiService[]; free: { name: string; purpose: string }[] }>(api, '/api/admin/apis', refresh + tick * 1000)
+  const reload = () => setTick((n) => n + 1)
+  const [adding, setAdding] = useState<string | null>(null)
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const check = async (key: ApiKeyRow) => {
+    setBusy(key.id)
+    try {
+      const { key: updated, tested } = await send<{ key: ApiKeyRow; tested: boolean }>(`/api/admin/apis/keys/${key.id}/check`, 'POST')
+      toast[updated.status === 'active' ? 'success' : 'warning'](tested ? `Checked: ${KEY_STATUS[updated.status].label.toLowerCase()}${credits(updated.credits) ? ` · ${credits(updated.credits)}` : ''}.` : 'This service can only be checked by using it; the planner will report it.')
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'The check failed.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (error) return <Failed>{error}</Failed>
+  return (
+    <div className="p-4 sm:p-6">
+      <h1 className="flex items-center gap-2 text-xl font-extrabold text-slate-900 dark:text-white"><KeyRound size={20} /> API keys</h1>
+      <p className="mt-1 max-w-3xl text-sm text-slate-500">
+        Every outside service the planner uses. When a key's free quota runs out, add another one here: the planner switches to the next working key by itself, with no redeploy. Keys are stored encrypted and only the last 4 characters are ever shown.
+      </p>
+      {data && !data.ready && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-400/30 dark:bg-amber-500/10 dark:text-amber-100">
+          Adding keys needs one setting first: set <b>INTERNAL_API_SECRET</b> (the same long random text) on both the server and the planner projects in Vercel, then redeploy both.
+        </div>
+      )}
+      {!data ? (
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-48 rounded-xl" />)}</div>
+      ) : (
+        <>
+          <div className="stagger mt-5 grid gap-4 xl:grid-cols-2">
+            {data.services.map((service) => {
+              const env = service.envKey
+              const envUsedUp = env.status && env.status.status !== 'active'
+              const working = (env.set && !envUsedUp ? 1 : 0) + service.keys.filter((k) => k.status === 'active').length
+              return (
+                <section key={service.id} className="flex flex-col rounded-xl border border-slate-200 p-4 dark:border-white/10">
+                  <div className="flex items-start gap-3">
+                    <span className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-lg font-display text-sm font-extrabold', working ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300')}>
+                      {service.name.slice(0, 2)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white">{service.name}</h2>
+                        <Badge tone={working ? 'green' : 'amber'}>{working ? `${working} working key${working > 1 ? 's' : ''}` : 'No working key'}</Badge>
+                      </div>
+                      <p className="text-sm text-slate-500">{service.purpose}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">{service.quota} · <a href={service.signup} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-semibold text-brand-700 hover:underline dark:text-brand-300">Get a key <ExternalLink size={11} /></a></p>
+                    </div>
+                  </div>
+
+                  <ul className="mt-4 space-y-2">
+                    <li className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/[0.03]">
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold">Main key <span className="font-mono text-xs font-normal text-slate-500">{service.envVar}</span></span>
+                        <span className="block text-xs text-slate-500">
+                          {env.set === null ? (data.plannerReachable ? 'Unknown' : 'Planner not reachable') : env.set ? 'Set in the planner’s Vercel settings' : 'Not set in Vercel'}
+                          {envUsedUp && env.status ? ` · ${env.status.status === 'exhausted' ? 'used up' : 'rejected'} ${ago(env.status.exhaustedAt)}` : ''}
+                        </span>
+                      </span>
+                      {env.set === false ? <Badge tone="slate">Missing</Badge> : envUsedUp && env.status ? <Badge tone={KEY_STATUS[env.status.status].tone}>{KEY_STATUS[env.status.status].label}</Badge> : env.set ? <Badge tone="green">Working</Badge> : null}
+                    </li>
+                    {service.keys.map((key, i) => (
+                      <li key={key.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-white/10">
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold">{key.label || `Spare key ${i + 1}`} <span className="font-mono text-xs font-normal text-slate-500">{key.masked}</span></span>
+                          <span className="block text-xs text-slate-500">
+                            Added {ago(key.createdAt)}
+                            {credits(key.credits) ? ` · ${credits(key.credits)}` : ''}
+                            {key.status !== 'active' && key.exhaustedAt ? ` · ${key.status === 'exhausted' ? 'used up' : 'rejected'} ${ago(key.exhaustedAt)}` : ''}
+                            {key.readable === false ? ' · cannot be read any more: remove and add it again' : ''}
+                          </span>
+                          {key.lastError && key.status !== 'active' && <span className="block truncate text-xs text-rose-600 dark:text-rose-300" title={key.lastError}>{key.lastError}</span>}
+                        </span>
+                        <Badge tone={KEY_STATUS[key.status].tone}>{KEY_STATUS[key.status].label}</Badge>
+                        <button onClick={() => void check(key)} disabled={busy === key.id} title="Check the key now" className="grid h-8 w-8 place-items-center rounded-full text-slate-500 hover:bg-slate-100 disabled:opacity-50 dark:hover:bg-white/5">
+                          {busy === key.id ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
+                        </button>
+                        <button onClick={() => setRemoving({ id: key.id, name: `${service.name} ${key.masked}` })} title="Remove the key" className="grid h-8 w-8 place-items-center rounded-full text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+                          <Trash2 size={15} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {adding === service.id ? (
+                    <AddKeyForm service={service} send={send} disabled={!data.ready} onDone={() => { setAdding(null); reload() }} onCancel={() => setAdding(null)} />
+                  ) : (
+                    <button onClick={() => setAdding(service.id)} disabled={!data.ready} className="mt-3 inline-flex h-9 items-center gap-1.5 self-start rounded-lg border border-dashed border-slate-300 px-3 text-sm font-semibold text-slate-600 transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 disabled:opacity-50 dark:border-white/15 dark:text-slate-300 dark:hover:bg-white/5">
+                      <Plus size={15} /> Add a spare key
+                    </button>
+                  )}
+                </section>
+              )
+            })}
+          </div>
+          <section className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-white/10">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Free services (no key needed)</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {data.free.map((free) => (
+                <div key={free.name} className="flex items-start gap-2 text-sm">
+                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                  <span><span className="font-semibold">{free.name}</span> <span className="text-slate-500">· {free.purpose}</span></span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+      <ConfirmDialog
+        open={!!removing}
+        tone="danger"
+        icon={<Trash2 size={20} />}
+        title="Remove this key?"
+        body={<>The planner stops using <b>{removing?.name}</b> within 5 minutes. The key itself stays valid at the provider.</>}
+        confirmLabel="Remove key"
+        onCancel={() => setRemoving(null)}
+        onConfirm={() => {
+          const target = removing!
+          setRemoving(null)
+          void send(`/api/admin/apis/keys/${target.id}`, 'DELETE')
+            .then(() => {
+              toast.success('Key removed.')
+              reload()
+            })
+            .catch((e) => toast.error(e instanceof Error ? e.message : 'The key could not be removed.'))
+        }}
+      />
+    </div>
+  )
+}
+
+function AddKeyForm({ service, send, disabled, onDone, onCancel }: { service: ApiService; send: <T>(path: string, method: 'POST' | 'DELETE', body?: unknown) => Promise<T>; disabled: boolean; onDone: () => void; onCancel: () => void }) {
+  const [key, setKey] = useState('')
+  const [label, setLabel] = useState('')
+  const [show, setShow] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const submit = async () => {
+    if (key.trim().length < 8) return setError('Paste the whole key.')
+    setBusy(true)
+    setError(null)
+    try {
+      const { key: added, tested } = await send<{ key: ApiKeyRow; tested: boolean }>(`/api/admin/apis/${service.id}/keys`, 'POST', { key: key.trim(), label: label.trim() || undefined })
+      toast.success(`${service.name} key added${tested ? ' and checked' : ''}${credits(added.credits) ? `: ${credits(added.credits)}` : ''}.`)
+      onDone()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The key could not be added.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        void submit()
+      }}
+      className="mt-3 animate-fade-up space-y-2 rounded-lg border border-brand-200 bg-brand-50/50 p-3 dark:border-brand-400/30 dark:bg-brand-500/10"
+    >
+      <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 focus-within:border-brand-500 dark:border-white/15 dark:bg-ink-900">
+        <KeyRound size={15} className="shrink-0 text-slate-400" />
+        <input type={show ? 'text' : 'password'} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} placeholder={`New ${service.name} key`} aria-label={`New ${service.name} key`} autoFocus className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none" />
+        <button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Hide key' : 'Show key'} className="text-slate-400 hover:text-slate-700 dark:hover:text-white">{show ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+      </label>
+      <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={60} placeholder="Label (optional), e.g. Backup account" aria-label="Key label" className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-brand-500 dark:border-white/15 dark:bg-ink-900" />
+      {error && <p className="text-xs font-medium text-rose-600 dark:text-rose-300">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="h-9 rounded-lg px-3 text-sm font-semibold text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-white/5">Cancel</button>
+        <button type="submit" disabled={busy || disabled} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand-700 px-4 text-sm font-semibold text-white hover:bg-brand-800 disabled:opacity-50 dark:bg-brand-500">
+          {busy && <Loader2 size={14} className="animate-spin" />} {busy ? 'Checking…' : 'Check and add'}
+        </button>
+      </div>
+    </form>
+  )
 }

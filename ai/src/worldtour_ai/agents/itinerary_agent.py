@@ -26,6 +26,7 @@ from worldtour_ai.services.transport import local_rates
 from worldtour_ai.services.weather_conflicts import is_bad_weather
 from worldtour_ai.tools.toolkit import schedule_tool
 from worldtour_ai.utils.money import format_money
+from worldtour_ai.utils.key_pool import api_key
 
 HOT_DAY_C = 35
 
@@ -184,7 +185,7 @@ class ItineraryAgent(BaseAgent):
         if completer is None:
             if not settings.ai_day_descriptions:
                 return None, None
-            if not settings.openrouter_api_key or settings.disable_network:
+            if not api_key("openrouter") or settings.disable_network:
                 return None, "The AI writer is not configured, so each day uses the built-in summary."
             completer = lambda system, user: OpenRouterProvider().complete(system, user, timeout=limit, attempts=1)
         # Hard wall-clock cap: a slow free model must not hold up the whole plan.

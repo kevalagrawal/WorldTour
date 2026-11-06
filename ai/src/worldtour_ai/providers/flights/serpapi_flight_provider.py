@@ -11,6 +11,7 @@ from worldtour_ai.config.settings import get_settings
 from worldtour_ai.providers.flights.base_flight_provider import BaseFlightProvider
 from worldtour_ai.utils.exceptions import EmptyResultError, ProviderError, QuotaExceededError
 from worldtour_ai.utils.http import HttpClient
+from worldtour_ai.utils.key_pool import api_key
 
 SERPAPI_URL = "https://serpapi.com/search.json"
 MAX_OPTIONS = 8
@@ -21,7 +22,7 @@ class SerpApiFlightProvider(BaseFlightProvider):
     data_source = "live"
 
     def __init__(self, api_key: str | None = None, http: HttpClient | None = None) -> None:
-        self.api_key = api_key if api_key is not None else get_settings().serpapi_api_key
+        self.api_key = api_key if api_key is not None else api_key("serpapi")
         self.http = http or HttpClient(timeout=30)
 
     def search_flights(

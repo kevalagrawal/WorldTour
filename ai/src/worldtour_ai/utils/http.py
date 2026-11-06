@@ -105,10 +105,13 @@ class HttpClient:
             return payload
 
         def _check(response) -> dict:
+            said = response.text[:200].replace("\n", " ")
             if response.status_code == 429:
-                raise RateLimitError("Provider rate limit reached")
+                raise RateLimitError(f"Provider rate limit reached: {said}")
             if response.status_code in {402, 403} and "quota" in response.text.lower():
                 raise QuotaExceededError("Provider quota exhausted")
+            if response.status_code in {401, 403}:
+                raise ProviderError(f"Provider request failed ({response.status_code}): {said}")
             if response.status_code >= 500:
                 raise ProviderError(f"Provider server error {response.status_code}")
             if response.status_code >= 400:
@@ -124,11 +127,33 @@ class HttpClient:
 
         try:
             payload = retry(_once, attempts=tries)
-        except RateLimitError:
-            raise
+        except ProviderError as exc:
+            # The key ran out or was refused: switch to the next key (env key, then the admin's spare keys).
+            swapped = _next_key(url, params, exc)
+            if swapped is None:
+                raise
+            return self.get_json(url, params=swapped, headers=headers, cache_ttl=cache_ttl, attempts=attempts)
         if cache_key is not None:
             _cache.set(cache_key, payload, ttl_seconds=cache_ttl)
         return payload
+
+
+_KEY_PARAMS = ("api_key", "apiKey", "access_key")
+
+
+def _next_key(url: str, params: dict | None, exc: Exception) -> dict | None:
+    """New params with the next key when `exc` means this request's key is used up or invalid."""
+    from worldtour_ai.utils import key_pool
+
+    service = service_for(url)
+    if service not in key_pool.SERVICES or not params:
+        return None
+    name = next((n for n in _KEY_PARAMS if params.get(n)), None)
+    kind = key_pool.failure_kind(exc)
+    if not name or not kind:
+        return None
+    following = key_pool.mark_failed(service, params[name], kind, str(exc))
+    return {**params, name: following} if following else None
 
 
 def ensure_records(payload: dict, key: str = "data") -> list:

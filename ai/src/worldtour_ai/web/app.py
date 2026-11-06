@@ -38,6 +38,7 @@ from worldtour_ai.services.translate import LANGUAGES, from_english, to_english
 from worldtour_ai.services.exporter import file_stem, plan_calendar, plan_text
 from worldtour_ai.workflows.state import fresh_state
 from worldtour_ai.workflows.travel_graph import build_workflow
+from worldtour_ai.utils.key_pool import api_key
 
 app = FastAPI(title="WorldTour API", version="1.0.0")
 logger = logging.getLogger("worldtour.web")
@@ -144,10 +145,10 @@ def health() -> dict:
         "access_code_required": bool(os.environ.get("ACCESS_CODE")),
         # Which data sources are configured (never the keys themselves), to explain fallbacks.
         "sources": {
-            "live_fares_and_hotels": bool(settings.serpapi_api_key),
-            "ai": bool(settings.openrouter_api_key),
-            "maps_and_places": bool(settings.geoapify_api_key),
-            "flight_schedules": bool(settings.aviationstack_api_key),
+            "live_fares_and_hotels": bool(api_key("serpapi")),
+            "ai": bool(api_key("openrouter")),
+            "maps_and_places": bool(api_key("geoapify")),
+            "flight_schedules": bool(api_key("aviationstack")),
         },
     }
 
