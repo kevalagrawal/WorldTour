@@ -45,7 +45,7 @@ export function Badge({ children, tone = 'slate' }: { children: ReactNode; tone?
 export function Stat({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-soft dark:border-white/10 dark:bg-ink-800">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {icon}
         {label}
       </div>

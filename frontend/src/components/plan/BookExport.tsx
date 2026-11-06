@@ -16,10 +16,10 @@ export function BookExport({ plan, onPdf }: { plan: Plan; display: Display; onPd
         <SectionTitle icon={<LinkIcon size={18} />} title="Book" subtitle="Prices here are planning estimates — confirm on these sites." />
         <ul className="space-y-2 text-sm">
           {links.ground && (
-            <li className="flex items-center gap-2"><TrainFront size={15} className="text-slate-400" /><ExternalLink href={links.ground.url}>{links.ground.label}</ExternalLink></li>
+            <li className="flex min-h-10 items-center gap-2"><TrainFront size={15} className="text-slate-400" /><ExternalLink href={links.ground.url}>{links.ground.label}</ExternalLink></li>
           )}
           {links.flights && (
-            <li className="flex items-center gap-2"><Plane size={15} className="text-slate-400" /><ExternalLink href={links.flights}>Flights on Google Flights</ExternalLink></li>
+            <li className="flex min-h-10 items-center gap-2"><Plane size={15} className="text-slate-400" /><ExternalLink href={links.flights}>Flights on Google Flights</ExternalLink></li>
           )}
           {links.hotels?.map((hotel) => (
             <li key={hotel.url} className="flex items-center gap-2"><LinkIcon size={15} className="text-slate-400" /><ExternalLink href={hotel.url}>{hotel.name} on Booking.com</ExternalLink></li>

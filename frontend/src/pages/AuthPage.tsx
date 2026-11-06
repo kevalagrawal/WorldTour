@@ -105,7 +105,9 @@ function Shell({ photos, children }: { photos: (string | null)[]; children: Reac
           </ul>
           <div className="mt-8 flex gap-1.5">
             {SLIDES.map((s, i) => (
-              <button key={s.place} onClick={() => setSlide(i)} aria-label={`Show ${s.place}`} className={clsx('h-1.5 rounded-full transition-all duration-500', i === slide ? 'w-8 bg-white' : 'w-3 bg-white/40 hover:bg-white/70')} />
+              <button key={s.place} onClick={() => setSlide(i)} aria-label={`Show ${s.place}`} className="group grid h-6 place-items-center px-0.5">
+                <span className={clsx('block h-1.5 rounded-full transition-all duration-500', i === slide ? 'w-8 bg-white' : 'w-3 bg-white/40 group-hover:bg-white/70')} />
+              </button>
             ))}
           </div>
         </div>
@@ -156,7 +158,7 @@ function PasswordInput({ value, onChange, autoComplete, placeholder }: { value: 
   return (
     <>
       <input type={show ? 'text' : 'password'} value={value} onChange={(e) => onChange(e.target.value)} autoComplete={autoComplete} placeholder={placeholder} className={inputClass} required />
-      <button type="button" onClick={() => setShow(!show)} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label={show ? 'Hide password' : 'Show password'}>
+      <button type="button" onClick={() => setShow(!show)} className="-mr-2 grid h-10 w-10 shrink-0 place-items-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label={show ? 'Hide password' : 'Show password'}>
         {show ? <EyeOff size={17} /> : <Eye size={17} />}
       </button>
     </>
@@ -498,7 +500,7 @@ function SignInForm({ redirect }: { redirect: string }) {
         </Field>
       </div>
       <div className="mt-2 text-right">
-        <button type="button" onClick={() => { setStep('reset-request'); setError(null) }} className="text-sm font-semibold text-brand-700 hover:underline dark:text-brand-300">Forgot password?</button>
+        <button type="button" onClick={() => { setStep('reset-request'); setError(null) }} className="py-2 text-sm font-semibold text-brand-700 hover:underline dark:text-brand-300">Forgot password?</button>
       </div>
       <div className="mt-5">
         <Submit busy={busy}>Sign in</Submit>

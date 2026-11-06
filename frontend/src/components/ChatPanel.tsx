@@ -153,7 +153,7 @@ export function ChatPanel() {
             aria-label={readAloud ? say('stopReading') : say('readAloud')}
             title={readAloud ? say('stopReading') : say('readAloud')}
             className={clsx(
-              'grid h-8 w-8 place-items-center rounded-lg border transition',
+              'grid h-9 w-9 place-items-center rounded-lg border transition',
               readAloud
                 ? 'border-brand-600 bg-brand-50 text-brand-800 dark:border-brand-400 dark:bg-brand-500/20 dark:text-white'
                 : 'border-slate-200 text-slate-500 hover:border-brand-300 hover:text-brand-700 dark:border-white/10 dark:text-slate-300',
@@ -271,11 +271,11 @@ export function ChatPanel() {
       )}
 
       {(quick.length > 0 || daysChip.length > 0 || askingDates || (plan && session?.stage === 'planned' && !busy)) && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2.5">
+        <div className="no-scrollbar flex shrink-0 gap-2 overflow-x-auto px-4 pb-2.5">
           {askingDates && !calendarOpen && (
             <button
               onClick={() => setCalendar({ open: true, at: askedAt })}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 px-3.5 py-1.5 text-xs font-semibold text-brand-800 shadow-sm transition hover:bg-brand-100 dark:border-brand-400/40 dark:bg-brand-500/15 dark:text-brand-100"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-brand-300 bg-brand-50 min-h-9 px-3.5 py-1.5 text-xs font-semibold text-brand-800 shadow-sm transition hover:bg-brand-100 dark:border-brand-400/40 dark:bg-brand-500/15 dark:text-brand-100"
             >
               <CalendarDays size={13} /> {say('pickDates')}
             </button>
@@ -283,7 +283,7 @@ export function ChatPanel() {
           {askingDates && (
             <button
               onClick={() => { setCalendar({ open: false, at: askedAt }); void send('flexible', say('flexible')) }}
-              className="shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
+              className="shrink-0 rounded-full border border-slate-200 bg-white min-h-9 px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
               {say('flexible')}
             </button>
@@ -292,7 +292,7 @@ export function ChatPanel() {
             <button
               onClick={() => setCalendar((c) => ({ open: !c.open, at: -1 }))}
               aria-expanded={calendarOpen}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white min-h-9 px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15"
             >
               <CalendarDays size={13} /> {say('changeDates')}
             </button>
@@ -305,7 +305,7 @@ export function ChatPanel() {
                 onClick={() => !on && void send(chip.send, chip.label)}
                 aria-pressed={'on' in chip ? on : undefined}
                 className={clsx(
-                  'inline-flex shrink-0 items-center gap-1 rounded-full border px-3.5 py-1.5 text-xs font-semibold shadow-sm transition',
+                  'inline-flex shrink-0 items-center gap-1 rounded-full border min-h-9 px-3.5 py-1.5 text-xs font-semibold shadow-sm transition',
                   on
                     ? 'cursor-default border-brand-600 bg-brand-50 text-brand-900 dark:border-brand-400 dark:bg-brand-500/20 dark:text-white'
                     : 'border-slate-200 bg-white text-slate-700 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-800 dark:border-white/10 dark:bg-ink-800 dark:text-slate-200 dark:hover:bg-brand-500/15',

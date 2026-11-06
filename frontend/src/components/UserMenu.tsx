@@ -49,14 +49,30 @@ function AccountMenu() {
   return <SignedInMenu />
 }
 
+/** Sign out from anywhere (desktop menu or the phone menu), with a toast. Only inside ClerkProvider. */
+export function useSignOut() {
+  const { signOut } = useClerk()
+  const navigate = useNavigate()
+  return () => {
+    // Leave account pages before signing out, or their sign-in guard bounces to /sign-in.
+    navigate('/')
+    const name = useAccount.getState().profile?.fullName?.split(/\s+/)[0]
+    void signOut({ redirectUrl: '/' })
+      .then(() => {
+        useAccount.getState().clear()
+        toast.success(name ? `Signed out. See you soon, ${name}!` : 'You have been signed out.')
+      })
+      .catch(() => toast.error('Could not sign out. Please try again.'))
+  }
+}
+
 function SignedInMenu() {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const profile = useAccount((s) => s.profile)
   const language = useStore((s) => s.language)
   const setLanguage = useStore((s) => s.setLanguage)
-  const { signOut } = useClerk()
-  const navigate = useNavigate()
+  const signOutNow = useSignOut()
   const location = useLocation()
 
   useEffect(() => setOpen(false), [location.pathname])
@@ -119,17 +135,7 @@ function SignedInMenu() {
           <div className="border-t border-slate-100 pt-1.5 dark:border-white/10">
             <button
               role="menuitem"
-              onClick={() => {
-                // Leave account pages before signing out, or their sign-in guard bounces to /sign-in.
-                navigate('/')
-                const name = useAccount.getState().profile?.fullName?.split(/\s+/)[0]
-                void signOut({ redirectUrl: '/' })
-                  .then(() => {
-                    useAccount.getState().clear()
-                    toast.success(name ? `Signed out. See you soon, ${name}!` : 'You have been signed out.')
-                  })
-                  .catch(() => toast.error('Could not sign out. Please try again.'))
-              }}
+              onClick={signOutNow}
               className={clsx(item, 'text-rose-600 hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-500/10')}
             >
               <LogOut size={16} /> Sign out

@@ -152,7 +152,7 @@ export function Select<T extends string>({
           'hover:border-brand-300 focus-visible:border-brand-500 focus-visible:ring-4 focus-visible:ring-brand-500/15',
           'dark:bg-ink-800 dark:text-white dark:hover:border-brand-400/50',
           open ? 'border-brand-500 ring-4 ring-brand-500/15 dark:border-brand-400' : 'border-slate-300 dark:border-white/15',
-          size === 'sm' ? 'h-8 px-2 text-xs font-semibold' : 'h-11 px-3 text-[15px]',
+          size === 'sm' ? 'h-9 px-2.5 text-xs font-semibold' : 'h-11 px-3 text-[15px]',
           className,
         )}
       >
@@ -189,7 +189,7 @@ export function Select<T extends string>({
                   onClick={() => pick(index)}
                   className={clsx(
                     'flex cursor-pointer select-none items-center gap-2.5 rounded-lg px-2.5 text-sm transition-colors',
-                    size === 'sm' ? 'py-1.5' : 'py-2',
+                    size === 'sm' ? 'py-2' : 'py-2.5',
                     index === active ? 'bg-brand-50 text-brand-900 dark:bg-white/[0.07] dark:text-white' : 'text-slate-700 dark:text-slate-200',
                     isSelected && 'font-semibold',
                   )}

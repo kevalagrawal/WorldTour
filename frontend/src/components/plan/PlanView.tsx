@@ -142,7 +142,7 @@ export function PlanView({ plan }: { plan: Plan }) {
               key={item.id}
               onClick={() => setTab(item.id)}
               className={clsx(
-                'flex min-w-0 flex-col items-center justify-center gap-0.5 whitespace-nowrap rounded-lg px-1 py-1.5 text-[11px] font-semibold transition active:scale-95 sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm',
+                'flex min-w-0 flex-col items-center justify-center gap-0.5 whitespace-nowrap rounded-lg px-1 py-1.5 text-xs font-semibold transition active:scale-95 sm:flex-row sm:gap-1.5 sm:px-3 sm:py-2 sm:text-sm',
                 tab === item.id
                   ? 'bg-brand-700 text-white shadow-sm dark:bg-brand-500'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/5 dark:hover:text-white',
