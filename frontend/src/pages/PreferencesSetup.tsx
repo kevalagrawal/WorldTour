@@ -130,7 +130,7 @@ export function PreferencesSetup() {
                       disabled={full}
                       className={clsx(
                         'group relative flex flex-col items-start gap-3 rounded-2xl border-2 p-3.5 text-left transition sm:p-4',
-                        on ? 'border-brand-600 bg-brand-50 shadow-soft dark:border-brand-400 dark:bg-brand-500/10' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
+                        on ? 'border-brand-600 bg-brand-50 shadow-soft ring-4 ring-brand-500/15 dark:border-brand-300 dark:bg-brand-500/25 dark:ring-brand-400/20' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
                         full && 'cursor-not-allowed opacity-40 hover:translate-y-0',
                       )}
                     >
@@ -169,7 +169,7 @@ export function PreferencesSetup() {
                       aria-pressed={on}
                       className={clsx(
                         'relative flex flex-col rounded-2xl border-2 p-4 text-left transition sm:p-5',
-                        on ? 'border-brand-600 bg-brand-50 shadow-soft dark:border-brand-400 dark:bg-brand-500/10' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
+                        on ? 'border-brand-600 bg-brand-50 shadow-soft ring-4 ring-brand-500/15 dark:border-brand-300 dark:bg-brand-500/25 dark:ring-brand-400/20' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
                       )}
                     >
                       <span className={clsx('grid h-11 w-11 place-items-center rounded-xl', on ? 'bg-brand-700 text-white dark:bg-brand-500' : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200')}>{item.icon}</span>
@@ -254,7 +254,7 @@ function Choice({ on, onClick, icon, label, hint }: { on: boolean; onClick: () =
       aria-pressed={on}
       className={clsx(
         'relative flex items-center gap-4 rounded-2xl border-2 p-4 text-left transition',
-        on ? 'border-brand-600 bg-brand-50 shadow-soft dark:border-brand-400 dark:bg-brand-500/10' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
+        on ? 'border-brand-600 bg-brand-50 shadow-soft ring-4 ring-brand-500/15 dark:border-brand-300 dark:bg-brand-500/25 dark:ring-brand-400/20' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-soft dark:border-white/10 dark:bg-ink-900/40',
       )}
     >
       <span className={clsx('grid h-12 w-12 shrink-0 place-items-center rounded-xl transition', on ? 'bg-brand-700 text-white dark:bg-brand-500' : 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200')}>{icon}</span>
