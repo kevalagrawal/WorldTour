@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 
 
@@ -155,9 +156,101 @@ def normalize(text: str) -> str:
 
 
 def lookup_place(name: str | None) -> Place | None:
+    """A known place, else (for a clean place-like name) the best town match from the geocoder."""
     if not name:
         return None
-    return _BY_ALIAS.get(normalize(name))
+    key = normalize(name)
+    hit = _BY_ALIAS.get(key)
+    if hit or not _geocodable(key):
+        return hit
+    return _geocode(key)
+
+
+# Words that are never a place on their own: keeps "for a couple" or "beach trip" away from the geocoder.
+_NOT_PLACES = set(
+    "a an the trip trips tour tours holiday holidays vacation weekend week weeks day days night nights for with and or to "
+    "from in on at by my our me we us i you couple family friends friend people person persons budget beach beaches "
+    "mountain mountains hill hills snow city cities somewhere anywhere there here home plan planning go going visit "
+    "explore solo honeymoon kid kids children child wife husband train trains flight flights bus car cab luxury cheap "
+    "premium balanced relaxed packed adventure nature history culture food shopping nightlife yoga rafting temple temples "
+    "under around about next this month year rs inr usd eur lakh k only just want wanna need please some any place places "
+    "good best nice short long stay hotel hotels resort resorts "
+    # Hinglish fillers ("mujhe dubai jana hai mumbai se")
+    "hai hain se ke ki ka ko liye mujhe hume humein jana jaana chahiye din log logo aur ya mein main bhi".split()
+)
+_GEOCODED: dict[str, tuple[float, Place | None]] = {}
+
+
+def _geocodable(key: str) -> bool:
+    words = key.split()
+    return (
+        3 <= len(key) <= 40
+        and 1 <= len(words) <= 3
+        and bool(re.fullmatch(r"[a-z][a-z .'-]*", key))
+        and not any(word in _NOT_PLACES for word in words)
+    )
+
+
+def _geocode(key: str) -> Place | None:
+    """Towns the catalog does not list (Lonavala, Coorg, Hampi…): Geoapify (OpenStreetMap, best
+    coverage), else the free Open-Meteo geocoder. Cached, including misses; never raises."""
+    cached = _GEOCODED.get(key)
+    if cached and time.time() - cached[0] < 24 * 3600:
+        return cached[1]
+    from worldtour_ai.config.settings import get_settings
+
+    settings = get_settings()
+    if settings.disable_network:
+        return None
+    place = _geoapify_town(key, settings.geoapify_api_key) if settings.geoapify_api_key else None
+    place = place or _open_meteo_town(key)
+    _GEOCODED[key] = (time.time(), place)
+    if place:
+        _BY_ALIAS.setdefault(key, place)
+    return place
+
+
+def _geoapify_town(key: str, api_key: str) -> Place | None:
+    import httpx
+
+    from worldtour_ai.utils.agent_logs import log_api_call
+
+    url = "https://api.geoapify.com/v1/geocode/search"
+    started = time.perf_counter()
+    try:
+        response = httpx.get(url, params={"text": key, "type": "city", "limit": 3, "format": "json", "lang": "en", "apiKey": api_key}, timeout=3)
+        rows = (response.json() or {}).get("results") or []
+        log_api_call("geoapify", url, status=response.status_code, duration_ms=(time.perf_counter() - started) * 1000, ok=response.status_code == 200, kind="geocode")
+    except Exception as exc:
+        log_api_call("geoapify", url, status=None, duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=f"{type(exc).__name__}: {exc}", kind="geocode")
+        return None
+    for row in rows:
+        name = row.get("city") or row.get("county") or row.get("name") or ""
+        confident = (row.get("rank") or {}).get("confidence", 0) >= 0.9
+        if confident and normalize(name) == key and row.get("lat") is not None:
+            return Place(name, "city", row["lat"], row["lon"], None, row.get("country"), (key,))
+    return None
+
+
+def _open_meteo_town(key: str) -> Place | None:
+    import httpx
+
+    from worldtour_ai.utils.agent_logs import log_api_call
+
+    url = "https://geocoding-api.open-meteo.com/v1/search"
+    started = time.perf_counter()
+    try:
+        response = httpx.get(url, params={"name": key, "count": 8, "language": "en", "format": "json"}, timeout=3)
+        rows = (response.json() or {}).get("results") or []
+        log_api_call("open-meteo", url, status=response.status_code, duration_ms=(time.perf_counter() - started) * 1000, ok=True, kind="geocode")
+    except Exception as exc:
+        log_api_call("open-meteo", url, status=None, duration_ms=(time.perf_counter() - started) * 1000, ok=False, error=f"{type(exc).__name__}: {exc}", kind="geocode")
+        return None
+    towns = [row for row in rows if str(row.get("feature_code", "")).startswith("PPL") and normalize(row.get("name", "")) == key]
+    if not towns:
+        return None
+    best = max(towns, key=lambda row: row.get("population") or 0)
+    return Place(best["name"], "city", best["latitude"], best["longitude"], None, best.get("country"), (key,))
 
 
 def place_aliases() -> list[str]:

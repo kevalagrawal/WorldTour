@@ -31,13 +31,16 @@ _BANNED_NAMES = {
     "open time around your stay",
     "local meal",
     "neighborhood walk",
+    # a bare generic word says nothing about where to go
+    "mandir", "temple", "park", "garden", "viewpoint", "view point", "beach", "church", "mosque", "museum", "lake",
+    "public park", "children park", "childrens park", "kids park", "playground", "market", "shiv mandir", "hanuman mandir",
 }
 OUTDOOR = {"nature", "beach", "adventure", "park"}
 NOT_SIGHTS = {"travel", "transfer", "meal", "stay"}
 # Minutes spent at a place, by category.
 _VISIT_MINUTES = {
     "history": 120, "culture": 105, "sightseeing": 75, "nature": 120, "beach": 150,
-    "shopping": 120, "entertainment": 150, "adventure": 150, "food": 75,
+    "shopping": 120, "entertainment": 150, "adventure": 150, "food": 75, "experience": 120,
 }
 _PACE = {
     "relaxed": {"start": 9 * 60 + 30, "cap": 2, "factor": 1.15},
@@ -51,6 +54,19 @@ _AIRPORT_LEAD = 180
 _STATION_LEAD = 60
 MAX_HOP_MINUTES = 75  # farther places need a separate day trip, not a hop between sights
 MAX_CITY_KM = 35
+DAY_TRIP_KM = 75  # a day with nothing left in the city goes to the best cluster of sights up to here
+_CLUSTER_KM = 20
+
+# Real things to do when a city's sights run out, instead of an empty "free day". {city} and {spot}
+# are filled in; {spot} is the best outdoor place already found (for the sunset), when there is one.
+_EXPERIENCES = [
+    ("Local market and street-food walk in {city}", "Browse the main bazaar for local crafts, spices and snacks; try the street food the locals queue for."),
+    ("Sunset at {spot}", "Get there 45 minutes before sunset for the best light; carry water and a light jacket."),
+    ("Heritage walk with a local guide in {city}", "A 2-hour guided walk through the old quarter; book a licensed guide at the tourist office or online."),
+    ("Café hopping and souvenir shopping in {city}", "Slow afternoon at the popular cafés; pick up local handicrafts as gifts."),
+    ("Cooking class or food tour in {city}", "Learn two or three regional dishes from a home chef; most classes include the meal."),
+    ("Spa or wellness session in {city}", "A massage or wellness treatment to rest between busy days; book a day ahead."),
+]
 
 
 def city_per_day(cities: list, day_count: int) -> list:
@@ -76,6 +92,8 @@ def catalog_from_places(places: list[dict], excluded: list[str] | None = None) -
         lowered = str(name).strip().lower()
         if lowered in _BANNED_NAMES or any(word in lowered for word in banned):
             continue
+        if lowered == str(place.get("city") or "").strip().lower():
+            continue  # the town itself ("Lonavala") is not a stop in the town
         if any(_same_spot(place, lowered, kept) for kept in catalog):
             continue
         seen.add(activity_id)
@@ -257,7 +275,7 @@ def plan_days(
     spec = _PACE.get(pace or "balanced", _PACE["balanced"])
     bad = bad_weather_days or set()
     hot = hot_days or set()
-    capacity = [max(0, min(spec["cap"], (end - start - 90) // 150)) for start, end in windows]
+    capacity = [max(0, min(spec["cap"], (end - start - 30) // 140)) for start, end in windows]
     days = [{"sights": [], "dinner": None} for _ in day_cities]
     single_city = len(dict.fromkeys(day_cities)) == 1
     for city in dict.fromkeys(day_cities):
@@ -269,10 +287,15 @@ def plan_days(
         if indoor_only:
             pool = [item for item in pool if item["category"] not in OUTDOOR]
         center = (anchors or {}).get(city) or _city_center(city)
+        far: list[dict] = []
         if center:
             # Places far outside the city need their own day trip; keep city days walkable or a short cab ride.
-            pool = [item for item in pool if item.get("lat") is None
-                    or haversine_km(center[0], center[1], item["lat"], item["lon"]) <= MAX_CITY_KM]
+            def km(item):
+                return haversine_km(center[0], center[1], item["lat"], item["lon"])
+
+            far = [item for item in pool if item.get("lat") is not None and MAX_CITY_KM < km(item) <= DAY_TRIP_KM
+                   and item["category"] != "food"]
+            pool = [item for item in pool if item.get("lat") is None or km(item) <= MAX_CITY_KM]
         pool.sort(key=lambda item: item.get("score") or 0, reverse=True)
         sights = [item for item in pool if item["category"] != "food"]
         meals = [item for item in pool if item["category"] == "food"]
@@ -286,12 +309,52 @@ def plan_days(
                     continue
                 days[i]["sights"].append(dict(item))
                 break
+        _fill_empty_days(days, indexes, capacity, far, sights, city, bad)
         for i in indexes:
             if (i + 1) in hot:
                 days[i]["sights"].sort(key=lambda item: item["category"] not in OUTDOOR)
             if meals and windows[i][1] >= _DINNER + 60:
                 days[i]["dinner"] = dict(meals.pop(0))
     return days
+
+
+def _fill_empty_days(days, indexes, capacity, far, sights, city, bad) -> None:
+    """No day is left empty while there is something worth doing: first a day trip to the best
+    cluster of sights 35–75 km away, then local experiences (market walk, sunset, food...)."""
+    far = sorted(far, key=lambda item: item.get("score") or 0, reverse=True)
+    rotation = 0
+    for i in indexes:
+        if days[i]["sights"] or capacity[i] < 1:
+            continue
+        options = [item for item in far if not (item["category"] in OUTDOOR and (i + 1) in bad)]
+        if options and capacity[i] >= 2:
+            lead = options[0]
+            near = [item for item in options[1:] if haversine_km(lead["lat"], lead["lon"], item["lat"], item["lon"]) <= _CLUSTER_KM]
+            trip = [lead, *near][: capacity[i]]
+            for item in trip:
+                far.remove(item)
+            days[i]["sights"] = [{**item, "detail": f"Day trip · {item.get('detail') or ''}".rstrip(' ·')} for item in _nearest_neighbour(trip, None)]
+            days[i]["day_trip"] = lead["name"]
+            continue
+        spot = next((item for item in sights if item["category"] in OUTDOOR and item.get("lat") is not None), None)
+        picks = []
+        while len(picks) < max(1, min(capacity[i], 3)) and rotation < 3 * len(_EXPERIENCES):
+            title, detail = _EXPERIENCES[rotation % len(_EXPERIENCES)]
+            rotation += 1
+            if "{spot}" in title and not spot:
+                continue
+            picks.append({
+                "activity_id": f"experience:{city}:{i}:{rotation}",
+                "name": title.format(city=city, spot=spot["name"] if spot else ""),
+                "city": city,
+                "category": "experience",
+                "score": 0,
+                "lat": spot["lat"] if spot and "{spot}" in title else None,
+                "lon": spot["lon"] if spot and "{spot}" in title else None,
+                "detail": detail,
+            })
+        # The sunset belongs at the end of the day.
+        days[i]["sights"] = sorted(picks, key=lambda item: item["name"].startswith("Sunset"))
 
 
 def build_timetable(
@@ -326,10 +389,11 @@ def build_timetable(
             entries.append(_entry(f"meal:lunch:{t}", lunch_at, lunch_at + 60, "meal", "Lunch nearby",
                                   f"{{money:{food_rate * 0.35:.2f}}} per person (part of the food budget)."))
             t, lunch_done = lunch_at + 60, True
-        if leg["minutes"] > MAX_HOP_MINUTES or t + leg["minutes"] + visit > sights_until:
+        day_trip_start = bool(plan.get("day_trip")) and here == base
+        if (leg["minutes"] > MAX_HOP_MINUTES and not day_trip_start) or t + leg["minutes"] + visit > sights_until:
             continue
         if leg["minutes"]:
-            entries.append(_hop(t, leg, item["name"]))
+            entries.append(_hop(t, leg, f"{item['name']} (day trip)" if day_trip_start and leg["minutes"] > MAX_HOP_MINUTES else item["name"]))
         arrive = t + leg["minutes"]
         entries.append(_entry(item["activity_id"], arrive, arrive + visit, item["category"], item["name"], item.get("detail") or "",
                               lat=item.get("lat"), lon=item.get("lon")))
@@ -550,13 +614,15 @@ def _theme(day: dict) -> str:
         return "Departure"
     if any(str(i).startswith("move:") for i in ids):
         return "Travel day"
+    if any("(day trip)" in str(a.get("name") or "") for a in day.get("activities") or []):
+        return "Day trip"
     categories = [a.get("category") for a in day.get("activities") or [] if a.get("category") not in NOT_SIGHTS | {"food"}]
     if not categories:
         return "Free day"
     label = max(set(categories), key=categories.count)
     return {
         "history": "Culture & sights", "culture": "Culture & sights", "nature": "Outdoors",
-        "beach": "Beach", "entertainment": "Fun & entertainment",
+        "beach": "Beach", "entertainment": "Fun & entertainment", "experience": "Local experiences",
     }.get(label, str(label).replace("_", " ").title())
 
 

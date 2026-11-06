@@ -388,6 +388,8 @@ def _heuristic(text: str, pending: list[str]) -> dict:
         "parser_notes": [],
     }
     _extract_route_phrase(raw, mentions, data)
+    if not data.get("destination"):
+        _guess_unlisted_destination(lowered, data)
     _extract_cities(lowered, mentions, data)
     _extract_duration(lowered, data)
     _extract_budget(lowered, data)
@@ -397,11 +399,26 @@ def _heuristic(text: str, pending: list[str]) -> dict:
     _extract_styles(lowered, data)
     _extract_pace(lowered, data)
     _apply_pending(raw, pending, data)
+    include_destination(data)
     if not data.get("destination") and len(data["cities"]) == 1:
         data["destination"] = data["cities"][0]
     if not data.get("destination") and len(data["cities"]) > 1:
         data["destination"] = "Multi-city"
     return data
+
+
+def include_destination(data: dict) -> None:
+    """'Jaipur and Udaipur' is read as destination Jaipur plus cities [Udaipur]; every agent plans
+    from the city list, so the destination goes first in it (otherwise Jaipur would be dropped)."""
+    destination = data.get("destination")
+    cities = list(data.get("cities") or [])
+    if not destination or destination == "Multi-city" or not cities or data.get("cities_are_suggestions"):
+        return
+    place = lookup_place(destination)
+    if place and place.kind != "city":
+        return
+    if normalize(destination) not in {normalize(city) for city in cities}:
+        data["cities"] = [destination, *cities]
 
 
 def _extract_route_phrase(raw: str, mentions, data: dict) -> None:
@@ -482,6 +499,29 @@ def _extract_route_phrase(raw: str, mentions, data: dict) -> None:
                 data["parser_notes"].append(
                     f"Cities {', '.join(place.suggested_cities)} are suggestions for {place.name}, not places you named."
                 )
+
+
+_UNLISTED = (
+    # "lonavala from pune", "plan a hampi trip", "coorg 3 days"
+    r"^(?:plan(?:ning)?\s+)?(?:an?\s+)?(?:trip\s+to\s+)?([a-z][a-z'-]+(?:\s+[a-z][a-z'-]+)?)\s+(?:from|trip|tour|for|in|with|\d)",
+    # "going to lonavala", "visit hampi", "explore coorg"
+    r"\b(?:to|visit|visiting|explore|exploring)\s+([a-z][a-z'-]+(?:\s+[a-z][a-z'-]+)?)",
+)
+
+
+def _guess_unlisted_destination(lowered: str, data: dict) -> None:
+    """A destination the catalog does not list: try the likely words with the geocoder (lookup_place)."""
+    origin = normalize(data.get("origin") or "")
+    for pattern in _UNLISTED:
+        match = re.search(pattern, lowered)
+        if not match:
+            continue
+        words = match.group(1).split()
+        for candidate in (" ".join(words), words[0]) if len(words) > 1 else (words[0],):
+            place = lookup_place(candidate)
+            if place and normalize(place.name) != origin:
+                data["destination"] = place.name
+                return
 
 
 def _place_in_span(fragment: str):
@@ -606,8 +646,15 @@ def _extract_travelers(lowered: str, data: dict) -> None:
     if found:
         data["travelers"] = _number_token(found.group(1))
         return
-    # "for 3 friends" names the whole group; "me and 3 friends" adds the speaker (below).
-    named = re.search(r"\bfor\s+(\d+|two|three|four|five|six)\s+(?:friends|buddies|colleagues)\b", lowered)
+    companions = _family_companions(lowered, kids)
+    if companions:
+        data["travelers"] = 1 + companions
+        data["parser_notes"].append(f"Counted you plus {companions} family member{'s' if companions > 1 else ''} as {1 + companions} travelers.")
+        if kids or "kid" in lowered or "child" in lowered:
+            data["trip_type"] = data.get("trip_type") or "family"
+        return
+    # "for 3 friends" or "4 friends from Pune" names the whole group; "me and 3 friends" adds the speaker (below).
+    named = re.search(r"(?<!with )(?<!and )\b(\d+|two|three|four|five|six)\s+(?:friends|buddies|colleagues)\b", lowered)
     if named:
         data["travelers"] = _number_token(named.group(1))
         return
@@ -623,6 +670,25 @@ def _extract_travelers(lowered: str, data: dict) -> None:
         data["parser_notes"].append("Interpreted a couple as 2 travelers.")
     if "family" in lowered:
         data["trip_type"] = data.get("trip_type") or "family"
+
+
+def _family_companions(lowered: str, kids) -> int:
+    """People travelling with the speaker when the message lists family members, else 0.
+
+    Only counted when there are children, parents or siblings in the list; a spouse alone is the
+    couple rule below ("me and my wife" = 2)."""
+    count = _number_token(kids.group(1)) if kids else 0
+    count += len(re.findall(r"\bmy (?:son|daughter)\b", lowered))
+    others = 0
+    if re.search(r"\b(?:my|our) parents\b|\bmom and dad\b|\bmother and father\b", lowered):
+        others += 2
+    else:
+        others += len(re.findall(r"\b(?:my )(?:mom|mum|mother|dad|father)\b", lowered))
+    others += len(re.findall(r"\bmy (?:brother|sister|grandmother|grandfather|grandma|grandpa)\b", lowered))
+    if not count and not others:
+        return 0
+    spouse = 1 if re.search(r"\b(?:wife|husband|spouse|partner)\b", lowered) else 0
+    return count + others + spouse
 
 
 def _extract_month(lowered: str, data: dict) -> None:

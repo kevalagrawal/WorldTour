@@ -20,6 +20,7 @@ from worldtour_ai.services.request_parser import (
     clarification_message,
     complete_dates,
     grounded_llm_fields,
+    include_destination,
     missing_essential,
     parse_travel_text,
     resolve_currency,
@@ -98,6 +99,7 @@ def finalize_collected(request: TravelRequest, skipped: list[str], grounded: dic
         notes.append("Still not provided after the questions: " + ", ".join(unresolved) + ".")
     data["parser_notes"] = notes
     merge_grounded(data, grounded)
+    include_destination(data)
     data["pace"] = data.get("pace") or "balanced"
     complete_dates(data)
     resolve_currency(data)

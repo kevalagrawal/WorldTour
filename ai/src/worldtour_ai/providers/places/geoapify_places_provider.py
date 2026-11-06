@@ -8,6 +8,9 @@ from worldtour_ai.utils.exceptions import EmptyResultError, ProviderError
 from worldtour_ai.utils.http import HttpClient
 
 _DEFAULT = "tourism.sights,tourism.attraction.viewpoint,entertainment.museum,entertainment.zoo,entertainment.aquarium,entertainment.theme_park,beach"
+# Searched as well, so towns with few classic "sights" still fill their days.
+_MORE = "tourism.attraction,heritage,religion.place_of_worship,natural.water,natural.mountain,leisure.park,entertainment.culture,national_park"
+_RADII_M = (12000, 40000)  # the second, wider circle only when the first finds too little
 _SKIP = ("memorial", "building", "office", "commercial.houseware", "man_made", "artwork", "accommodation")
 # OpenStreetMap tags single shops as malls and hotel frontage as beaches; keep only names that look like the real thing.
 _MALL_WORDS = ("mall", "souk", "souq", "market", "bazaar", "outlet", "plaza", "galleria", "arcade")
@@ -35,29 +38,30 @@ class GeoapifyPlacesProvider(BasePlacesProvider):
     def __init__(self, http: HttpClient | None = None) -> None:
         self.http = http or HttpClient()
 
-    def search_places(self, city: str, lat: float | None, lon: float | None, preferences: list[str]) -> dict:
+    def search_places(self, city: str, lat: float | None, lon: float | None, preferences: list[str], limit: int = 24) -> dict:
         key = get_settings().geoapify_api_key
         if not key or lat is None or lon is None:
             raise ProviderError("Geoapify needs an API key and coordinates")
-        groups = [_DEFAULT]
+        groups = [_DEFAULT, _MORE]
         for pref in preferences or []:
             category = _CATEGORIES.get(pref)
             if category and category not in groups:
                 groups.append(category)
         batches = []
-        for category in groups:
-            payload = self.http.get_json(
-                "https://api.geoapify.com/v2/places",
-                params={
-                    "categories": category,
-                    "filter": f"circle:{lon},{lat},8000",
-                    "bias": f"proximity:{lon},{lat}",
-                    "limit": 20,
-                    "apiKey": key,
-                },
-                cache_ttl=12 * 3600,
-            )
-            batches.append(payload.get("features") or [])
+        for radius in _RADII_M:
+            for category in groups if radius == _RADII_M[0] else [_DEFAULT] + ([_MORE] if sum(len(b) for b in batches) < 2 * limit else []):
+                payload = self.http.get_json(
+                    "https://api.geoapify.com/v2/places",
+                    params={
+                        "categories": category,
+                        "filter": f"circle:{lon},{lat},{radius}",
+                        "bias": f"proximity:{lon},{lat}",
+                        "limit": 40,
+                        "apiKey": key,
+                    },
+                    cache_ttl=12 * 3600,
+                )
+                batches.append(payload.get("features") or [])
         features = []
         seen_ids = set()
         for row in range(max((len(batch) for batch in batches), default=0)):
@@ -90,13 +94,25 @@ class GeoapifyPlacesProvider(BasePlacesProvider):
                     "city": city,
                     "lat": coords[1],
                     "lon": coords[0],
-                    "rating": 4.0,
+                    "rating": _rating(name, categories_found),
                     "data_source": "live",
                 }
             )
         if not places:
             raise EmptyResultError("Geoapify returned no places")
         return {"provider_used": self.name, "data_source": "live", "places": places}
+
+
+_REAL_PARK_WORDS = ("garden", "national", "lake", "botanical", "zoo", "sanctuary", "forest", "falls", "valley", "fort")
+
+
+def _rating(name: str, categories: list[str]) -> float:
+    """OpenStreetMap has no ratings. Ordinary neighbourhood parks rank below real sights."""
+    lowered = name.lower()
+    joined = " ".join(categories)
+    if "leisure.park" in joined and not any(word in lowered for word in _REAL_PARK_WORDS) and "tourism" not in joined:
+        return 3.4
+    return 4.0
 
 
 def _short_address(text: str, city: str) -> str:

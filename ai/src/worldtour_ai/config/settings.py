@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     ai_description_timeout_seconds: float = 45.0
     # The AI reads a message only when the built-in parser left an essential detail out; then it may take
     # this long, because the alternative is asking the traveler a question.
-    parser_llm_wait_seconds: float = 20.0
+    parser_llm_wait_seconds: float = 8.0
 
     model_config = SettingsConfigDict(
         env_file=str(_ENV_PATH) if _ENV_PATH.exists() else None,

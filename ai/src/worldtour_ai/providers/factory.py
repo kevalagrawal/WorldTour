@@ -124,8 +124,36 @@ class PlacesGateway:
         )
         self.primary = GeoapifyPlacesProvider() if use_live else None
 
-    def search_places(self, *args, **kwargs) -> dict:
-        return _call(self.primary, None, "search_places", *args, label="Geoapify", **kwargs)
+    def search_places(self, city: str, lat, lon, preferences, limit: int = 24) -> dict:
+        """Geoapify and Wikipedia at the same time; landmarks found by both keep Wikipedia's description."""
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+
+        from worldtour_ai.providers.places.wikipedia_places import wikipedia_landmarks
+
+        settings = get_settings()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            osm = pool.submit(contextvars.copy_context().run, _call, self.primary, None, "search_places", city, lat, lon, preferences, label="Geoapify", limit=limit)
+            wiki = None
+            if not settings.disable_network and lat is not None:
+                wiki = pool.submit(contextvars.copy_context().run, wikipedia_landmarks, city, lat, lon)
+            try:
+                result = osm.result()
+            except Exception as exc:
+                result, osm_error = None, exc
+            try:
+                landmarks = wiki.result() if wiki else []
+            except Exception as exc:
+                logger.debug("Wikipedia landmarks failed: %s", exc)
+                landmarks = []
+        if result is None and not landmarks:
+            raise osm_error
+        result = result or {"provider_used": "wikipedia", "data_source": "live", "places": []}
+        merged = _merge_landmarks(result.get("places") or [], landmarks)
+        if landmarks:
+            result["provider_used"] = f"{result.get('provider_used')}+wikipedia" if result.get("places") else "wikipedia"
+        result["places"] = merged
+        return result
 
 
 class RoutingGateway:
@@ -154,3 +182,32 @@ class CurrencyGateway:
 
     def convert(self, amount, source, target):
         return _call(self.primary, self.fallback, "convert", amount, source, target, label="Frankfurter")
+
+
+def _merge_landmarks(places: list[dict], landmarks: list[dict]) -> list[dict]:
+    """Union of both lists. A landmark within 300 m of a place with a similar name is the same spot:
+    the place keeps its id and gains the Wikipedia description and the higher rating."""
+    from worldtour_ai.algorithms.graphs.geo import haversine_km
+
+    def key(name: str) -> str:
+        return "".join(ch for ch in name.lower() if ch.isalnum())
+
+    merged = [dict(place) for place in places]
+    for landmark in landmarks:
+        twin = next(
+            (
+                place for place in merged
+                if place.get("lat") is not None
+                and haversine_km(place["lat"], place["lon"], landmark["lat"], landmark["lon"]) <= 0.3
+                and (key(landmark["name"]) in key(place["name"]) or key(place["name"]) in key(landmark["name"]))
+            ),
+            None,
+        )
+        if twin:
+            twin["address"] = landmark["address"] or twin.get("address")
+            twin["rating"] = max(twin.get("rating") or 0, landmark["rating"])
+            if twin.get("category") == "sightseeing":
+                twin["category"] = landmark["category"]
+        elif not any(key(landmark["name"]) == key(place["name"]) for place in merged):
+            merged.append(dict(landmark))
+    return merged

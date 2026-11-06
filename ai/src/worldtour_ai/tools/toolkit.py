@@ -173,7 +173,8 @@ def _weather(payload_json: str) -> str:
 
 def _places(payload_json: str) -> str:
     data = _load(payload_json)
-    result = PlacesGateway().search_places(data.get("city") or "", data.get("lat"), data.get("lon"), data.get("preferences") or [])
+    limit = int(data.get("limit") or 12)
+    result = PlacesGateway().search_places(data.get("city") or "", data.get("lat"), data.get("lon"), data.get("preferences") or [], limit=limit)
     places = result.get("places") or []
     graph: dict[str, list[str]] = {"city_center": []}
     categories: dict[str, list[str]] = {}
@@ -199,14 +200,18 @@ def _places(payload_json: str) -> str:
         return weighted_score({"rating": (place.get("rating") or 4) / 5, "preference_match": match})
 
     pool = discovered or places
-    limit = int(data.get("limit") or 12)
     by_category: dict[str, list[dict]] = {}
     for place in pool:
         by_category.setdefault(place.get("category") or "sights", []).append(place)
+    # A fair share per category keeps the mix varied; leftover room goes to the best of the rest,
+    # so a city with mostly one kind of sight still gets as many places as the trip needs.
     share = max(2, -(-limit // max(len(by_category), 1)))
     picked: list[dict] = []
     for members in by_category.values():
         picked.extend(top_k(members, k=min(share, len(members)), key=score))
+    chosen = {id(place) for place in picked}
+    rest = [place for place in pool if id(place) not in chosen]
+    picked.extend(top_k(rest, k=max(0, min(limit - len(picked), len(rest))), key=score))
     ranked = sort_by_key(picked, score)[:limit]
     for place in ranked:
         place["score"] = score(place)

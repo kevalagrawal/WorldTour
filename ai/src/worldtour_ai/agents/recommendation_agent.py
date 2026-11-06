@@ -27,7 +27,7 @@ class RecommendationAgent(BaseAgent):
         preferences = request.get("preferences") or request.get("activity_preferences") or []
         slots = {"relaxed": 2, "balanced": 3, "packed": 4}.get(request.get("pace") or "balanced", 3)
         days = int(request.get("duration_days") or 3)
-        per_city = min(30, max(8, -(-days * slots // len(located)) + 4))
+        per_city = min(45, max(12, -(-days * slots // len(located)) + 8))
         excluded = [name.strip().lower() for name in request.get("excluded_places") or [] if name.strip()]
         if "traveling with children" not in (request.get("special_requirements") or []) and request.get("trip_type") != "family":
             # Children's venues only when the request mentions children or a family trip.
