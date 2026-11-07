@@ -20,7 +20,7 @@ cd server
 npm install
 # fill in server/.env (see .env.example)
 npm run dev          # http://localhost:5000/api/health
-npm test             # 14 API tests on a temporary in-memory MongoDB
+npm test             # 20 API tests on a temporary in-memory MongoDB
 ```
 
 For the website to use it locally, set in `frontend/.env`:

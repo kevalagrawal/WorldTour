@@ -143,7 +143,7 @@ function page({ title, description, path, body, jsonLd }) {
 <meta property="og:url" content="${SITE}${path}" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
-<meta property="og:image" content="${SITE}/og-image.jpg" />
+<meta property="og:image" content="${SITE}/og-image.jpg?v=2" />
 <meta name="twitter:card" content="summary_large_image" />
 <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
 <style>${CSS}</style>
